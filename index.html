@@ -386,7 +386,8 @@ function initSignaturePad(id){
    護理師考核表（真實配分，取自上傳表單 2025-06-11(4修)）
    其他職類結構相同，待此份確認後依樣複製
 =================================================================== */
-const FORM_RN={ title:'護理師（士）考核表', cats:[
+const FORMS={
+ rn:{ title:'護理師（士）考核表', cats:[
   {name:'臨床業務',full:55,groups:[
     {sub:'病人照護',items:[
       {t:'能正確執行三班病人照護及各項業務工作，並依科室需求配合主管調動，協助其它單位。',p:10},
@@ -433,11 +434,230 @@ const FORM_RN={ title:'護理師（士）考核表', cats:[
       {t:'其他：',p:0},
     ]},
   ]},
-]};
-
-let formStage=1; // 1=員工自評  2=主管評核
+]},
+ AHN:{ title:'副護理長考核表', cats:[
+  {name:'臨床業務',full:50,groups:[{items:[
+   {t:'配合護理長領導理念、目標、計畫活動，共同推動科室護理相關業務。',p:5},
+   {t:'按計畫執行品質監測，業務各項報表與作業如期繳交。',p:5},
+   {t:'推動與督導科系之教研業務與訓練；每半年評值各業務成效（年度計畫、實習學生、PGYN、學術與教研）、檢討分析與改善。',p:5},
+   {t:'協助護理長排班、分配及彈性調派工作，達到合理人力運作。',p:5},
+   {t:'妥善管理財產避免遺失或不當損傷。',p:5},
+   {t:'與醫療團隊合作與討論提升病人照護品質。',p:5},
+   {t:'業務訊息上通下達，隨時與護理長保持聯繫，發揮管理效能與效率。',p:5},
+   {t:'帶領團隊獲得病人及家屬的認同。',p:5},
+   {t:'單位異常事件，督促單位及協同護理長依「異常事件通報流程」通報並輔導改善。',p:5},
+   {t:'協助收集並分析相關教研趨勢與發展，提供建議與參考。',p:5},
+  ]}]},
+  {name:'敬業態度',full:25,groups:[{items:[
+   {t:'遵守醫院出勤原則（準時上下班、刷卡、請假、配戴識別證…）。',p:10},
+   {t:'依規定或需要出席相關會議及院方活動，並帶動單位人員參與。',p:2},
+   {t:'配合與推動業務需要調派或支援。',p:3},
+   {t:'服裝儀容合乎規定。',p:2},
+   {t:'積極學習行政事務。',p:4},
+   {t:'參與部內小組運作，年度計畫如期完成。',p:2},
+   {t:'對主管或同儕態度合宜。',p:2},
+  ]}]},
+  {name:'教與學（上限15）',full:15,groups:[{items:[
+   {t:'能指導單位人員知能發展，並有具體成效。',p:2},
+   {t:'參與教學（積極投入院內外各種教學或研發等活動）。',p:2},
+   {t:'參加科室品管圈（QCC）（輔導員、圈長最多加4分，圈員2分）。',p:4},
+   {t:'各單位教學品質成效佳（如 PBL、EBN、IPP、IPE、個案討論等）。',p:2},
+   {t:'個人學術與研究寫作案發表且具成效（依進度）。',p:5},
+   {t:'個人教學、進階、研究推展具成效。',p:5},
+   {t:'創新與發表相關業務之推展與配搭成效。',p:5},
+  ]}]},
+  {name:'指標業務',full:10,groups:[{items:[
+   {t:'主動參與並完成護理部發展重點業務，且每半年具有成效。',p:10},
+   {t:'病人／家屬指名讚美每次加1分，最多加2分。',p:0},
+   {t:'於護理長休假時，代理其職務。',p:0},
+   {t:'其他：',p:0},
+  ]}]},
+ ]},
+ leader:{ title:'小組長考核表', cats:[
+  {name:'臨床業務',full:50,groups:[{items:[
+   {t:'配合護理長領導理念、目標、計畫活動，共同推動科室護理相關業務。',p:3},
+   {t:'直接照顧病人，依標準完成每日護理項目。',p:3},
+   {t:'每日協助臨床護理人員處理臨床護理問題，安排三班人員護理個案。',p:4},
+   {t:'業務各項報表與作業如期繳交。',p:4},
+   {t:'按計畫執行品質監測。',p:4},
+   {t:'協助相關技術與教育訓練。',p:4},
+   {t:'有效運用人力。',p:4},
+   {t:'妥善管理財產避免遺失或不當損傷。',p:4},
+   {t:'與醫療團隊合作與討論提升病人照護品質。',p:4},
+   {t:'領導能上通下達。',p:4},
+   {t:'帶領團隊獲得病人及家屬的認同。',p:4},
+   {t:'參加科室品管圈（QCC）（輔導員、圈長最多加4分，圈員2分）。',p:4},
+   {t:'如期且正確完成交辦事務。',p:4},
+  ]}]},
+  {name:'敬業態度',full:35,groups:[{items:[
+   {t:'遵守醫院出勤原則（準時上下班、刷卡、請假、配戴識別證…）。',p:10},
+   {t:'依規定或需要出席相關會議及院方活動，並帶動單位人員參與。',p:4},
+   {t:'配合與推動業務需要調派或支援。',p:4},
+   {t:'積極處理臨床問題。',p:4},
+   {t:'服裝儀容合乎規定。',p:5},
+   {t:'參與部內小組運作，年度計畫如期完成。',p:4},
+   {t:'對主管或同儕態度合宜。',p:4},
+  ]}]},
+  {name:'教與學',full:5,groups:[{items:[
+   {t:'能指導單位人員知能發展，並有具體成效。',p:2},
+   {t:'帶新人參與教學（含實習學生）。',p:3},
+  ]}]},
+  {name:'主管加分',full:10,groups:[{items:[
+   {t:'家屬指名讚美每次加1分，最多加2分。',p:10},
+   {t:'配合業務調班（依程度加分）。',p:0},
+   {t:'負責批價扣庫，並能維持業務運作。',p:0},
+   {t:'帶新人並使能獨立上線。',p:0},
+   {t:'其他：',p:0},
+  ]}]},
+ ]},
+ tech:{ title:'急診技術員考核表', cats:[
+  {name:'臨床業務',full:50,groups:[{items:[
+   {t:'能正確執行各項業務。',p:8},
+   {t:'服務態度、問題處理能力，獲得病人及家屬的認同。',p:8},
+   {t:'能與醫療團隊合作與討論提升病人照護品質。',p:7},
+   {t:'醫療團隊對執行業務之滿意。',p:6},
+   {t:'通過單位各項測試（含筆試、口試或技術考）。',p:5},
+   {t:'依規定時間點正確完成點班並追蹤異常狀況及紀錄。',p:5},
+   {t:'妥善管理財產避免遺失或不當損傷。',p:6},
+   {t:'參與單位各股運作，年度計畫如期完成。',p:5},
+  ]}]},
+  {name:'敬業態度',full:30,groups:[{items:[
+   {t:'遵守醫院出勤原則（準時上下班、刷卡、請假、配戴識別證…）。',p:4},
+   {t:'遵守單位排派班原則。',p:4},
+   {t:'依規定或需要出席相關會議與活動。',p:4},
+   {t:'配合業務需要調派或支援。',p:4},
+   {t:'服裝儀容合乎規定。',p:4},
+   {t:'對主管或同儕態度合宜。',p:3},
+   {t:'執行及推動上級交辦之業務。',p:4},
+   {t:'參與單位改善計畫。',p:3},
+  ]}]},
+  {name:'教與學',full:10,groups:[{items:[
+   {t:'每年參與並完成全院規範之基本課程時數。',p:4},
+   {t:'主動學習，發現問題並提出改善建議。',p:3},
+   {t:'帶新人。',p:3},
+  ]}]},
+  {name:'主管加分',full:10,groups:[{items:[
+   {t:'主動發現問題或協助問題改善。',p:10},
+   {t:'家屬指名讚美每次加2分，最多加6分。',p:0},
+   {t:'以身作則，常帶笑臉。',p:0},
+   {note:'加分項目請簡略說明。'},
+  ]}]},
+ ]},
+ an:{ title:'急診助理員考核表', cats:[
+  {name:'臨床業務',full:50,groups:[{items:[
+   {t:'正確執行工作業務並確實遵守工作規範。',p:5},
+   {t:'正確執行各種材料物品之領用、借用、歸還與點收。',p:5},
+   {t:'醫療團隊對執行業務之滿意度。',p:5},
+   {t:'正確執行庫房及耗材的管理及維護庫房區整潔。',p:7},
+   {t:'妥善管理財產避免遺失或不當損傷。',p:5},
+   {t:'能正確執行點班並完成物品追蹤。',p:8},
+   {t:'主動發現問題，並交班或告知主管。',p:5},
+   {t:'正確且如期完成主管交辦事務。',p:5},
+   {t:'對決策後之事項能配合遵循。',p:5},
+  ]}]},
+  {name:'敬業態度',full:30,groups:[{items:[
+   {t:'遵守醫院出勤原則（準時上下班、刷卡、請假、配戴識別證…）。',p:5},
+   {t:'依規定或需要出席相關會議與活動。',p:5},
+   {t:'遵守單位排派班原則。',p:5},
+   {t:'配合業務需要調派或支援。',p:5},
+   {t:'對主管或同儕態度合宜。',p:5},
+   {t:'服裝儀容合乎規範。',p:5},
+  ]}]},
+  {name:'教與學',full:10,groups:[{items:[
+   {t:'完成全院規範之基本課程時數。',p:7},
+   {t:'帶領新人。',p:3},
+  ]}]},
+  {name:'主管加分',full:10,groups:[{items:[
+   {t:'笑容可掬服務態度。',p:10},
+   {t:'主動協助業務進展及發現問題並提出改善。',p:0},
+   {t:'病人或家屬對助理員讚美。',p:0},
+   {t:'互助合作。',p:0},
+   {note:'加分項目請簡略說明。'},
+  ]}]},
+ ]},
+ clerk:{ title:'急診事務員考核表', cats:[
+  {name:'臨床業務',full:50,groups:[{items:[
+   {t:'遵守院內工作規則與決策事項。',p:5},
+   {t:'執行業務時，未因個人因素被申訴。',p:5},
+   {t:'各式報表如期繳交。',p:10},
+   {t:'主動協助內外部顧客辦理部內事務。',p:5},
+   {t:'財產控管未異常。',p:5},
+   {t:'如期協助各式活動、會議舉行。',p:5},
+   {t:'主動發現問題並提出改善辦法。',p:5},
+   {t:'如期且正確完成交辦事務。',p:10},
+  ]}]},
+  {name:'敬業態度',full:30,groups:[{items:[
+   {t:'遵守醫院出勤原則（準時上下班、刷卡、請假、配戴識別證…）。',p:10},
+   {t:'依規定或需要，出席相關會議與活動。',p:5},
+   {t:'配合單位業務派班且態度良好。',p:5},
+   {t:'正式班表公告後，能依班表出勤。',p:5},
+   {t:'服裝儀容整潔。',p:5},
+   {note:'若發生曠班或未依規定誠實通報加減OT情節重大者，敬業態度得分為0。'},
+  ]}]},
+  {name:'職務貢獻（10+）',full:10,groups:[{items:[
+   {t:'如期完成院內外在職必修課程。',p:4},
+   {t:'參加科室品管圈（QCC 圈員2分）。',p:3},
+   {t:'各項會議資料與紀錄正確完整。',p:3},
+  ]}]},
+  {name:'主管加分',full:10,groups:[{items:[
+   {t:'配合業務調班（依程度加分）。',p:10},
+   {t:'病人／家屬／同儕指名讚美每次加1分，最多加3分。',p:0},
+   {t:'業務精實、簡化作業流程。',p:0},
+   {t:'其他：',p:0},
+  ]}]},
+ ]},
+ HN:{ title:'護理長考核表', cats:[
+  {name:'臨床業務管理',full:50,groups:[{items:[
+   {t:'業務各項報表與作業如期繳交，並有成效檢討分析與改進。',p:8},
+   {t:'制定並定期監測單位之照護品質（含查核病歷），並有審核結果。',p:8},
+   {t:'合理管控單位人力、材料成本。',p:7},
+   {t:'每半年與單位人員績效考核面談（需有紀錄）至少一次。',p:7},
+   {t:'與醫療團隊討論困難照護病人，參與床邊教學或指導，提升照護品質。',p:7},
+   {t:'護士、護理師能力受醫療團隊、病人及家屬肯定。',p:7},
+   {t:'領導能上通下達。',p:6},
+  ]}]},
+  {name:'敬業態度',full:20,groups:[{items:[
+   {t:'遵守醫院出勤原則（準時上下班、刷卡、請假、配戴識別證…）。',p:3},
+   {t:'依規定或需要出席相關會議及院方活動，並帶動單位人員參與。',p:3},
+   {t:'配合與推動業務需要調派或支援。',p:4},
+   {t:'服裝儀容合乎規定。',p:3},
+   {t:'參與部內各小組運作，年度計畫如期完成。',p:4},
+   {t:'對主管或同儕態度合宜。',p:3},
+  ]}]},
+  {name:'教與學',full:10,groups:[{items:[
+   {t:'能依單位教學、培訓計畫執行，促進單位人員知能發展。',p:2},
+   {t:'吸引並留住優秀人才：能辨認優秀人才並提供其發展的環境。',p:4},
+   {t:'持續學習（積極主動參與院內外研習課程或在職進修等）。',p:2},
+   {t:'促進單位護理進階成效與學術能力成長。',p:2},
+  ]}]},
+  {name:'護理站管理',full:10,groups:[{items:[
+   {t:'能維持護理站、討論室、倉庫等環境整潔及護理站內環境安寧。',p:3},
+   {t:'能主動巡視病房，發現問題並尋求解決。',p:2},
+   {t:'能主動促進科內及科際間和睦，並有成效。',p:3},
+   {t:'應監督單位財務流向合宜（出入流向不明查證屬實者，考核第四區，並依人事規章辦理）。',p:2},
+  ]}]},
+  {name:'指標業務（加分，上限10）',full:10,groups:[{items:[
+   {t:'工作計畫較預定進度超前，充分達成計畫目標，成績卓著。',p:0},
+   {t:'簡化工作流程，提升增進工作效能。',p:0},
+   {t:'發揮團隊提升服務品質。',p:0},
+   {t:'主動跨單位指導同仁，傳授知識、經驗、技能等。',p:0},
+   {t:'單位人員參與病房會議或活動出席狀況良好。',p:0},
+   {t:'特殊貢獻。',p:0},
+   {t:'擔任委員會主席或執秘（組長3分、副組長或執秘2分）。',p:0},
+   {t:'其他：',p:0},
+  ]}]},
+  {name:'業務貢獻（督導評分，20分）',full:20,groups:[{items:[
+   {t:'品管業務成效。',p:9},
+   {t:'學術寫作與發表成效。',p:5},
+   {t:'教學品質與成效。',p:4},
+   {t:'護理主管加分。',p:2},
+  ]}]},
+ ]},
+};
+let formStage=1, activeForm=null; // 1=員工自評  2=主管評核
 
 function buildScoreTable(form){
+  const totalFull=form.cats.reduce((a,c)=>a+c.full,0);
   let html='<table class="score-table"><colgroup><col class="tw"><col class="cw"><col class="iw"><col class="iw"></colgroup>'
     +'<thead><tr><th>考核項目</th><th>配分</th><th>自評</th><th>主管<br>評核</th></tr></thead><tbody>';
   form.cats.forEach((c,ci)=>{
@@ -458,13 +678,13 @@ function buildScoreTable(form){
       <td id="catself${ci}">0</td><td id="catsup${ci}">0</td></tr>`;
   });
   html+='</tbody></table>'
-    +'<div class="grand"><span>自評總分 <b id="selfTotal">0</b> / 100</span>'
-    +'<span>主管評核總分 <b id="supTotal">0</b> / 100</span></div>';
+    +'<div class="grand"><span>自評總分 <b id="selfTotal">0</b> / ${totalFull}</span>'
+    +'<span>主管評核總分 <b id="supTotal">0</b> / ${totalFull}</span></div>';
   return html;
 }
 function recalcForm(){
   let st=0,mt=0;
-  FORM_RN.cats.forEach((c,ci)=>{
+  (activeForm?activeForm.cats:[]).forEach((c,ci)=>{
     let s=0,m=0;
     document.querySelectorAll(`.self[data-cat="${ci}"]`).forEach(i=>s+=(+i.value||0));
     document.querySelectorAll(`.sup[data-cat="${ci}"]`).forEach(i=>m+=(+i.value||0));
@@ -487,13 +707,15 @@ function setStage(s){
 }
 
 function openForm(id){
-  const isRN = currentUser.role==='rn';
+  const form = FORMS[currentUser.role] || null;
+  activeForm = form;
+  const ev = currentUser.role==='HN' ? '督導' : '護理長';
   const datePart=labelOf(id).split('　')[0], timePart=labelOf(id).split('　')[1];
-  const body = isRN ? buildScoreTable(FORM_RN)
-    : `<div class="fp-note">「${roleLabel(currentUser.role)}」考核單範本下一步補上，欄位與計分結構與護理師相同（此處先示意流程與簽名）。</div>`;
+  const body = form ? buildScoreTable(form)
+    : `<div class="fp-note">「${roleLabel(currentUser.role)}」考核表範本準備中。</div>`;
   $('formBody').innerHTML=`
     <div class="fp-head"><div class="org">嘉義基督教醫院　急診　護理部</div>
-      <div class="ttl">${isRN?FORM_RN.title:roleLabel(currentUser.role)+'考核表'}</div></div>
+      <div class="ttl">${form?form.title:roleLabel(currentUser.role)+'考核表'}</div></div>
     <div class="fp-meta">
       <div><span>姓名</span>${currentUser.name}</div>
       <div><span>職類</span>${roleLabel(currentUser.role)}</div>
@@ -502,16 +724,16 @@ function openForm(id){
     </div>
     <div class="stage-tabs no-print">
       <button class="stage-tab active" id="tab1">① 員工自評<small>本人填寫＋本人簽名</small></button>
-      <button class="stage-tab" id="tab2">② 主管評核<small>護理長填寫＋護理長簽名</small></button>
+      <button class="stage-tab" id="tab2">② 主管評核<small>${ev}填寫＋${ev}簽名</small></button>
     </div>
     ${body}
     <div class="fp-block"><div class="lbl">雙向回饋</div><textarea class="fb-area"></textarea></div>
-    <div class="fp-note no-print">在「自己負責的階段」簽名：員工於①簽受考人欄、護理長於②簽主管欄。可用手指或觸控筆，簽錯按清除。</div>
+    <div class="fp-note no-print">在「自己負責的階段」簽名：受考人於①簽名、${ev}於②簽名。可用手指或觸控筆，簽錯按清除。</div>
     <div class="fp-sign-grid" style="grid-template-columns:1fr 1fr 1fr">
       <div class="sig sig-wrap" id="wrap1"><div class="sig-cap">受考人簽名</div>
         <canvas class="sig-pad" id="sig1"></canvas>
         <button class="sig-clear no-print" data-pad="sig1">清除</button></div>
-      <div class="sig sig-wrap" id="wrap2"><div class="sig-cap">單位主管（護理長）</div>
+      <div class="sig sig-wrap" id="wrap2"><div class="sig-cap">單位主管（${ev}）</div>
         <canvas class="sig-pad" id="sig2"></canvas>
         <button class="sig-clear no-print" data-pad="sig2">清除</button></div>
       <div class="sig sig-wrap dim" id="wrap3"><div class="sig-cap">單位上一級主管<br><small style="color:#9AA6B2">（督導，視流程）</small></div>
@@ -522,12 +744,11 @@ function openForm(id){
   initSignaturePad('sig1'); initSignaturePad('sig2'); initSignaturePad('sig3');
   document.querySelectorAll('.sig-clear').forEach(b=>b.onclick=()=>{
     const c=document.getElementById(b.dataset.pad); c._clear&&c._clear(); });
-  if(isRN){
-    document.querySelectorAll('.score-inp').forEach(i=>i.oninput=recalcForm);
-    document.getElementById('tab1').onclick=()=>setStage(1);
-    document.getElementById('tab2').onclick=()=>setStage(2);
-    setStage(1);
-  }
+  if(form) document.querySelectorAll('.score-inp').forEach(i=>i.oninput=recalcForm);
+  // 兩階段切換（所有職類都可用）
+  document.getElementById('tab1').onclick=()=>setStage(1);
+  document.getElementById('tab2').onclick=()=>setStage(2);
+  setStage(1);
 }
 
 /* ---------- 渲染 ---------- */
