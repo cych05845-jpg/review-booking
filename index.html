@@ -74,6 +74,20 @@
   .pending h4{color:var(--eve); margin-bottom:8px;}
   .pending .grp{font-size:12.5px; margin-bottom:6px;}
   .pending .grp b{color:var(--ink);} .pending .grp span{color:var(--muted);}
+  /* 開放日期管理 */
+  #cfgBox h4{margin:0 0 10px; font-size:13px; color:var(--teal-dark); letter-spacing:.5px;}
+  .cfg-row{display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--hair); font-size:13px; flex-wrap:wrap;}
+  .cfg-row .cdate{font-weight:700; width:84px; font-variant-numeric:tabular-nums;}
+  .cfg-row label{display:inline-flex; align-items:center; gap:3px; color:var(--muted);}
+  .cfg-row .del{margin-left:auto; font-size:12px; color:#B4453C; background:none; border:1px solid #EBC9C6; border-radius:99px; padding:3px 9px; cursor:pointer;}
+  .cfg-add{display:flex; align-items:center; gap:8px; margin-top:12px; flex-wrap:wrap; font-size:13px;}
+  .cfg-add input[type=date]{padding:7px 8px; border:1px solid var(--hair); border-radius:8px; font:inherit;}
+  .cfg-add label{display:inline-flex; align-items:center; gap:3px; color:var(--muted);}
+  .cfg-add .addbtn{background:var(--teal-soft); color:var(--teal-dark); border:1px solid var(--teal); border-radius:8px; padding:7px 12px; font-weight:600; cursor:pointer;}
+  .cfg-foot{display:flex; gap:10px; margin-top:14px;}
+  .cfg-save{flex:1; background:var(--teal); color:#fff; border:none; border-radius:9px; padding:11px; font-weight:700; cursor:pointer;}
+  .cfg-clear{background:#fff; color:#B4453C; border:1px solid #EBC9C6; border-radius:9px; padding:11px 14px; font-weight:600; cursor:pointer;}
+  .cfg-note{font-size:11.5px; color:var(--muted); margin-top:8px;}
 
   .day{background:var(--surface); border:1px solid var(--hair); border-radius:var(--radius);
     padding:14px 14px 6px; margin-bottom:14px;}
@@ -212,6 +226,7 @@
   </div>
 
   <div class="admin-box" id="adminBox"></div>
+  <div class="admin-box" id="cfgBox" style="display:none"></div>
   <div id="board"></div>
 </div>
 
@@ -266,7 +281,13 @@ const ROLE_ORDER=['HN','AHN','leader','rn','tech','an','clerk'];
 const API_URL='https://script.google.com/macros/s/AKfycbzH-fwi4ccoL_nXj70IiYRzXdfuXfe_c4qfkxb4-YeXKjr_Gwc8PMvbedtwTAJ0Sh4/exec';
 
 // 執行期資料（連線後由後端覆蓋；空白時用示範資料）
-let ROSTER=[], DAYS=[], bookings={}, ROLE_DIST=[];
+let ROSTER=[], DAYS=[], ROLE_DIST=[];
+let occupied=new Set();   // 已被佔用的 slotId（不含姓名，給所有人）
+let myslot=null;          // 目前使用者自己的時段
+let adminBookings=null;   // slotId→{name,role}，僅通過管理密碼後取得
+let adminPass='';         // 管理密碼（驗證成功後保存，供輪詢更新）
+let adminLevel='';        // 'view'=小組長以上看名單 / 'admin'=護理長可改設定
+let cfgDraft=[];          // 開放日期編輯暫存 [{date, shifts:[]}]
 const LIVE = !!API_URL;
 
 function computeRoleDist(){
@@ -294,12 +315,96 @@ async function loadFromServer(){
   try{
     const d=await api();
     ROSTER=d.roster||[]; DAYS=buildDays(d.open||[]);
-    bookings=Object.assign({}, d.bookings||{});
-    computeRoleDist(); buildUserSelect(); render();
+    occupied=new Set(d.occupied||[]);
+    computeRoleDist(); buildUserSelect();
+    if(currentUser) await refreshMine();
+    render();
   }catch(e){ toast('連線失敗，請重新整理頁面'); }
 }
 async function pollBookings(){
-  try{ const d=await api(); bookings=Object.assign({}, d.bookings||{}); render(); }catch(e){}
+  try{
+    const d=await api(); occupied=new Set(d.occupied||[]);
+    if(adminMode && adminPass) await fetchAdmin(adminPass,true);
+    render();
+  }catch(e){}
+}
+// 取得「自己」的時段（後端只回傳本人那一格，不洩漏他人）
+async function refreshMine(){
+  if(!LIVE || !currentUser){ return; }
+  try{ const r=await api({action:'mine',name:currentUser.name}); myslot=r.slotId||null; }catch(e){}
+}
+// 管理檢視：帶密碼向後端要「誰約了哪格」，密碼錯則不給
+async function fetchAdmin(pass,silent){
+  try{
+    const r=await api({action:'admin',pass});
+    if(r&&r.ok){ adminBookings=r.bookings||{}; adminPass=pass; adminMode=true; adminLevel=r.level||'view';
+      $('adminBtn').classList.add('on'); $('adminBtn').textContent='結束檢視';
+      if(!silent){
+        if(adminLevel==='admin'){ cfgDraft=DAYS.map(d=>({date:d.date,shifts:[...d.shifts]})); buildCfgEditor(); }
+        toast(adminLevel==='admin'?'已進入管理（護理長）':'已進入檢視');
+      }
+      render();
+    } else if(!silent){ toast('密碼錯誤'); }
+  }catch(e){ if(!silent) toast('連線失敗'); }
+}
+
+/* ---------- 開放日期管理（僅護理長 admin） ---------- */
+const SH_DEF=[['night','大夜'],['eve','小夜'],['day','白班']];
+function buildCfgEditor(){
+  const box=$('cfgBox');
+  if(!(adminMode && adminLevel==='admin')){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='block';
+  cfgDraft.sort((a,b)=>a.date<b.date?-1:1);
+  let rows='<h4>開放日期管理</h4>';
+  if(!cfgDraft.length) rows+='<div class="cfg-note">目前沒有開放日期，請於下方新增。</div>';
+  cfgDraft.forEach((d,i)=>{
+    const [,M,D]=d.date.split('-');
+    let chk=SH_DEF.map(([k,lab])=>`<label><input type="checkbox" data-i="${i}" data-sh="${k}" ${d.shifts.includes(k)?'checked':''}>${lab}</label>`).join('');
+    rows+=`<div class="cfg-row"><span class="cdate">${(+M)}/${(+D)}</span>${chk}
+      <button class="del" data-del="${i}">刪除</button></div>`;
+  });
+  rows+=`<div class="cfg-add">
+      <input type="date" id="cfgDate">
+      ${SH_DEF.map(([k,lab])=>`<label><input type="checkbox" class="addsh" data-sh="${k}" checked>${lab}</label>`).join('')}
+      <button class="addbtn" id="cfgAdd">新增日期</button>
+    </div>
+    <div class="cfg-foot">
+      <button class="cfg-save" id="cfgSave">儲存開放設定</button>
+      <button class="cfg-clear" id="cfgClear">清空所有預約</button>
+    </div>
+    <div class="cfg-note">儲存後立即生效（不需重新部署）。每半年新一輪考核：改好日期→儲存→按「清空所有預約」即可重新開放。</div>`;
+  box.innerHTML=rows;
+  // 綁定
+  box.querySelectorAll('.cfg-row input[type=checkbox]').forEach(c=>c.onchange=()=>{
+    const i=+c.dataset.i, k=c.dataset.sh, arr=cfgDraft[i].shifts;
+    if(c.checked){ if(!arr.includes(k)) arr.push(k); } else { cfgDraft[i].shifts=arr.filter(x=>x!==k); }
+  });
+  box.querySelectorAll('.del').forEach(b=>b.onclick=()=>{ cfgDraft.splice(+b.dataset.del,1); buildCfgEditor(); });
+  $('cfgAdd').onclick=()=>{
+    const dt=$('cfgDate').value; if(!dt){ toast('請先選日期'); return; }
+    if(cfgDraft.some(d=>d.date===dt)){ toast('這天已在清單中'); return; }
+    const sh=[...box.querySelectorAll('.addsh')].filter(c=>c.checked).map(c=>c.dataset.sh);
+    if(!sh.length){ toast('至少勾一個班別'); return; }
+    cfgDraft.push({date:dt,shifts:sh}); buildCfgEditor();
+  };
+  $('cfgSave').onclick=saveCfg;
+  $('cfgClear').onclick=clearAll;
+}
+async function saveCfg(){
+  const open=[]; cfgDraft.forEach(d=>d.shifts.forEach(sh=>open.push({date:d.date,shift:sh})));
+  const total=open.length*4;
+  if(total<ROSTER.length && !confirm(`目前共 ${total} 格，少於 ${ROSTER.length} 人，可能不夠。仍要儲存嗎？`)) return;
+  try{ const r=await api({action:'setConfig',pass:adminPass,open});
+    if(r&&r.ok){ toast('開放設定已儲存'); await loadFromServer(); buildCfgEditor(); }
+    else toast('儲存失敗（權限？）');
+  }catch(e){ toast('連線失敗'); }
+}
+async function clearAll(){
+  if(!confirm('確定清空「所有人」的預約？名單與開放日期會保留，僅清掉預約紀錄，無法復原。')) return;
+  try{ const r=await api({action:'clearBookings',pass:adminPass});
+    if(r&&r.ok){ myslot=null; toast('已清空所有預約'); await loadFromServer(); if(adminPass) await fetchAdmin(adminPass,true); buildCfgEditor(); }
+    else toast('清空失敗（權限？）');
+  }catch(e){ toast('連線失敗'); }
 }
 
 /* ---------- 示範資料（API_URL 空白時用，方便預覽） ---------- */
@@ -314,18 +419,17 @@ function loadDemo(){
   DAYS=[['2026-06-23','週二'],['2026-06-24','週三'],['2026-06-25','週四'],
         ['2026-06-26','週五'],['2026-06-29','週一'],['2026-06-30','週二']]
     .map(([date,wd])=>{ const [,M,D]=date.split('-'); return {date,wd,d:(+M)+'/'+(+D),shifts:['night','eve','day']}; });
-  bookings={};
+  occupied=new Set(); adminBookings={}; myslot=null;
   [['2026-06-23_night_08:30',8],['2026-06-23_day_16:30',15],['2026-06-24_eve_14:45',0],
    ['2026-06-25_night_09:00',30],['2026-06-26_day_17:15',45],['2026-06-29_eve_15:00',60]]
-   .forEach(([id,idx])=>{ bookings[id]={...ROSTER[idx]}; });
+   .forEach(([id,idx])=>{ occupied.add(id); adminBookings[id]={...ROSTER[idx]}; });
   computeRoleDist();
 }
 
 let currentUser=null, adminMode=false;
 const $=id=>document.getElementById(id);
 const slotId=(date,sk,t)=>`${date}_${sk}_${t}`;
-function myBooking(){ if(!currentUser) return null;
-  return Object.keys(bookings).find(k=>bookings[k].name===currentUser.name)||null; }
+function myBooking(){ return myslot; }
 function labelOf(id){ const [date,sk,t]=id.split('_');
   const day=DAYS.find(d=>d.date===date), sh=SHIFTS.find(s=>s.key===sk);
   return `${day.d} ${day.wd}　${sh.label} ${t}`; }
@@ -797,7 +901,7 @@ function render(){
   DAYS.forEach(day=>{
     const dayShifts=(day.shifts||['night','eve','day']).map(k=>SHIFT_BY[k]).filter(Boolean);
     let taken=0; const total=dayShifts.length*4; grand+=total;
-    dayShifts.forEach(sh=>sh.times.forEach(t=>{ if(bookings[slotId(day.date,sh.key,t)]) taken++; }));
+    dayShifts.forEach(sh=>sh.times.forEach(t=>{ if(occupied.has(slotId(day.date,sh.key,t))) taken++; }));
     const card=document.createElement('div'); card.className='day';
     card.innerHTML=`<div class="day-head"><span class="day-date">${day.d}</span>
       <span class="day-wd">${day.wd}</span><span class="day-left">餘 ${total-taken} / ${total}</span></div>`;
@@ -807,28 +911,30 @@ function render(){
         <span class="shift-win">${sh.win}</span></div>`;
       const grid=document.createElement('div'); grid.className='slots';
       sh.times.forEach(t=>{
-        const id=slotId(day.date,sh.key,t), who=bookings[id],
-              isMine=who&&currentUser&&who.name===currentUser.name;
+        const id=slotId(day.date,sh.key,t);
+        const isMine=(id===myslot);
+        const adminWho=(adminMode&&adminBookings)?adminBookings[id]:null;
+        const taken=occupied.has(id)||!!adminWho;
         const btn=document.createElement('button'); btn.className='slot';
         if(isMine){ btn.classList.add('mine'); btn.innerHTML=`${t}<span class="sub">您的時段</span>`; }
-        else if(who){ btn.classList.add('taken'); btn.innerHTML=`${t}<span class="sub">${adminMode?who.name:'已約'}</span>`; }
+        else if(taken){ btn.classList.add('taken'); btn.innerHTML=`${t}<span class="sub">${adminWho?adminWho.name:'已約'}</span>`; }
         else{ btn.innerHTML=`${t}<span class="sub">可預約</span>`; }
-        btn.onclick=()=>onSlot(id,who,isMine); grid.appendChild(btn);
+        btn.onclick=()=>onSlot(id, taken&&!isMine, isMine); grid.appendChild(btn);
       });
       block.appendChild(grid); card.appendChild(block);
     });
     board.appendChild(card);
   });
 
-  const used=Object.keys(bookings).length;
+  const used=occupied.size;
   $('totalSlots').textContent=grand; $('freeSlots').textContent=grand-used;
   $('pendingPeople').textContent=ROSTER.length-used;
 }
 
 function renderAdmin(){
   const box=$('adminBox'); box.classList.toggle('show',adminMode);
-  if(!adminMode){ box.innerHTML=''; return; }
-  const booked=new Set(Object.values(bookings).map(b=>b.name));
+  if(!adminMode || !adminBookings){ box.innerHTML=''; return; }
+  const booked=new Set(Object.values(adminBookings).map(b=>b.name));
   let rows='<h4>各職類預約進度</h4>';
   ROLE_DIST.forEach(r=>{
     const done=ROSTER.filter(p=>p.role===r.role&&booked.has(p.name)).length;
@@ -844,11 +950,11 @@ function renderAdmin(){
   box.innerHTML=rows+pend+'</div>';
 }
 
-function onSlot(id,who,isMine){
+function onSlot(id,takenByOther,isMine){
   if(!currentUser){ toast('請先在上方選擇您的姓名'); return; }
   if(isMine){ askCancel(id); return; }
-  if(who){ toast('這個時段已被預約，請改選其他'); return; }
-  const mine=myBooking();
+  if(takenByOther){ toast('這個時段已被預約，請改選其他'); return; }
+  const mine=myslot;
   if(mine) confirmBox('更改時段','您已預約 <span class="big">'+labelOf(mine)+'</span><br>要改為 <span class="big">'+labelOf(id)+'</span> 嗎？', ()=>commitBook(id));
   else     confirmBox('確認預約','確認預約　<span class="big">'+labelOf(id)+'</span>？<br><span style="font-size:13px">送出後此時段即固定為您所有。</span>', ()=>commitBook(id));
 }
@@ -857,20 +963,21 @@ function commitBook(id){
     const email=$('userEmail').value.trim();
     api({action:'book',slotId:id,name:currentUser.name,role:currentUser.role,email})
       .then(r=>{
-        if(r&&r.ok){ toast('預約成功 · '+labelOf(id)); pollBookings(); }
+        if(r&&r.ok){ myslot=id; toast('預約成功 · '+labelOf(id)); pollBookings(); }
         else if(r&&r.reason==='taken'){ toast('這個時段剛被選走，請改選其他'); pollBookings(); }
         else if(r&&r.reason==='busy'){ toast('系統忙碌，請再按一次'); }
         else toast('預約失敗，請再試一次');
       }).catch(()=>toast('連線失敗，請再試一次'));
   }else{ // 示範模式
-    const mine=myBooking(); if(mine) delete bookings[mine];
-    bookings[id]={...currentUser}; render(); toast('預約成功 · '+labelOf(id));
+    if(myslot){ occupied.delete(myslot); if(adminBookings) delete adminBookings[myslot]; }
+    occupied.add(id); if(adminBookings) adminBookings[id]={...currentUser}; myslot=id;
+    render(); toast('預約成功 · '+labelOf(id));
   }
 }
 function askCancel(id){ confirmBox('取消時段','要取消 <span class="big">'+labelOf(id)+'</span> 嗎？取消後此格會重新開放。', ()=>{
   if(LIVE){ api({action:'cancel',slotId:id,name:currentUser.name})
-    .then(()=>{ toast('已取消預約'); pollBookings(); }).catch(()=>toast('連線失敗，請再試一次')); }
-  else{ delete bookings[id]; render(); toast('已取消預約'); }
+    .then(()=>{ myslot=null; toast('已取消預約'); pollBookings(); }).catch(()=>toast('連線失敗，請再試一次')); }
+  else{ occupied.delete(id); if(adminBookings) delete adminBookings[id]; myslot=null; render(); toast('已取消預約'); }
 }, true); }
 
 let okHandler=null;
@@ -891,9 +998,17 @@ let toastTimer=null;
 function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2200); }
 
-$('userSelect').onchange=e=>{ currentUser=ROSTER.find(p=>p.name===e.target.value)||null; render(); };
-$('adminBtn').onclick=()=>{ adminMode=!adminMode; $('adminBtn').classList.toggle('on',adminMode);
-  $('adminBtn').textContent=adminMode?'結束檢視':'管理檢視'; render(); };
+$('userSelect').onchange=async e=>{ currentUser=ROSTER.find(p=>p.name===e.target.value)||null;
+  myslot=null; if(currentUser) await refreshMine(); render(); };
+$('adminBtn').onclick=()=>{
+  if(adminMode){ // 結束檢視
+    adminMode=false; adminBookings=null; adminPass=''; adminLevel='';
+    $('cfgBox').style.display='none'; $('cfgBox').innerHTML='';
+    $('adminBtn').classList.remove('on'); $('adminBtn').textContent='管理檢視'; render(); return;
+  }
+  if(LIVE){ const pw=prompt('請輸入管理密碼（限小組長以上）'); if(pw) fetchAdmin(pw,false); }
+  else{ adminMode=true; $('adminBtn').classList.add('on'); $('adminBtn').textContent='結束檢視'; render(); }
+};
 
 // 啟動：有設 API_URL 就連後端＋每5秒輪詢；否則顯示示範資料
 if(LIVE){ loadFromServer(); setInterval(pollBookings,5000); }
