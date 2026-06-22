@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>考核會談時段預約</title>
+<style>
+  :root{
+    --bg:#F5F7F9; --surface:#FFFFFF; --ink:#1F2A37; --muted:#5B6876; --hair:#E4E9ED;
+    --teal:#0E8C7F; --teal-dark:#0B7468; --teal-soft:#E3F4F1;
+    --taken-bg:#EDF0F3; --taken-ink:#9AA6B2;
+    --night:#4F46E5; --night-soft:#EEF0FF;
+    --eve:#C2741A;   --eve-soft:#FAF1E4;
+    --day:#0E7CC2;   --day-soft:#E7F2FB;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; line-height:1.5;}
+  .wrap{max-width:560px; margin:0 auto; padding:0 16px 96px;}
+
+  header{position:sticky; top:0; z-index:20; background:rgba(245,247,249,.92);
+    backdrop-filter:saturate(1.2) blur(8px); border-bottom:1px solid var(--hair);}
+  .head-inner{max-width:560px; margin:0 auto; padding:14px 16px 12px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .title{font-size:18px; font-weight:700; letter-spacing:.3px;}
+  .title small{display:block; font-weight:500; font-size:12px; color:var(--muted); margin-top:1px;}
+  .admin-toggle{font-size:12px; color:var(--muted); background:none; border:1px solid var(--hair);
+    padding:6px 10px; border-radius:999px; cursor:pointer; white-space:nowrap;}
+  .admin-toggle.on{color:var(--teal-dark); border-color:var(--teal); background:var(--teal-soft);}
+
+  .panel{background:var(--surface); border:1px solid var(--hair); border-radius:var(--radius);
+    padding:14px; margin:16px 0;}
+  .field-label{font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:600;}
+  select{width:100%; padding:12px 14px; font-size:16px; border:1px solid var(--hair);
+    border-radius:10px; background:#fff; color:var(--ink); appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%235B6876' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center;}
+  .role-line{font-size:12px; color:var(--muted); margin-top:8px;}
+  .role-line b{color:var(--ink);}
+  .email-inp{width:100%; margin-top:10px; padding:11px 13px; font-size:15px; border:1px solid var(--hair);
+    border-radius:10px; color:var(--ink); box-sizing:border-box;}
+  .email-inp:focus{outline:2px solid var(--teal); outline-offset:1px; border-color:var(--teal);}
+  .status{margin-top:10px; font-size:14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .status .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+  .status.empty{color:var(--muted);} .status.empty .dot{background:#C2CAD3;}
+  .status.none{color:var(--eve);} .status.none .dot{background:var(--eve);}
+  .status.booked .dot{background:var(--teal);}
+  .status.booked b{color:var(--teal-dark);}
+  .mini-cancel{margin-left:auto; font-size:12px; color:#B4453C; background:none;
+    border:1px solid #EBC9C6; padding:5px 10px; border-radius:999px; cursor:pointer;}
+
+  /* 預約完成後：行事曆 / 考核單 */
+  .actions{display:none; gap:8px; margin-top:12px; flex-wrap:wrap;}
+  .actions.show{display:flex;}
+  .act-btn{font-size:13px; font-weight:600; padding:9px 13px; border-radius:10px; cursor:pointer;
+    border:1px solid var(--teal); background:var(--teal-soft); color:var(--teal-dark);
+    display:inline-flex; align-items:center; gap:6px; text-decoration:none;}
+  .act-btn:hover{background:var(--teal); color:#fff;}
+  .act-btn svg{width:15px;height:15px;}
+
+  .admin-box{background:var(--surface); border:1px solid var(--teal); border-radius:var(--radius);
+    padding:14px; margin:0 0 16px; display:none;}
+  .admin-box.show{display:block;}
+  .admin-box h4{margin:0 0 10px; font-size:13px; color:var(--teal-dark); letter-spacing:.5px;}
+  .role-row{display:flex; align-items:center; gap:10px; margin-bottom:9px; font-size:13px;}
+  .role-name{width:62px; flex:0 0 auto; font-weight:600;}
+  .bar{flex:1; height:7px; background:#EDF0F3; border-radius:99px; overflow:hidden;}
+  .bar > span{display:block; height:100%; background:var(--teal); border-radius:99px;}
+  .role-num{width:54px; text-align:right; flex:0 0 auto; color:var(--muted);
+    font-variant-numeric:tabular-nums; font-family:ui-monospace,Menlo,monospace;}
+  .pending{margin-top:12px; border-top:1px dashed var(--hair); padding-top:10px;}
+  .pending h4{color:var(--eve); margin-bottom:8px;}
+  .pending .grp{font-size:12.5px; margin-bottom:6px;}
+  .pending .grp b{color:var(--ink);} .pending .grp span{color:var(--muted);}
+
+  .day{background:var(--surface); border:1px solid var(--hair); border-radius:var(--radius);
+    padding:14px 14px 6px; margin-bottom:14px;}
+  .day-head{display:flex; align-items:baseline; gap:8px; margin-bottom:10px;}
+  .day-date{font-size:16px; font-weight:700;}
+  .day-wd{font-size:13px; color:var(--muted);}
+  .day-left{margin-left:auto; font-size:12px; color:var(--muted);}
+  .shift{margin-bottom:12px;}
+  .shift-label{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .shift-tag{font-size:13px; font-weight:700; padding:2px 10px; border-radius:999px;}
+  .shift-win{font-size:12px; color:var(--muted);
+    font-variant-numeric:tabular-nums; font-family:ui-monospace,"SF Mono",Menlo,monospace;}
+  .night .shift-tag{color:var(--night); background:var(--night-soft);}
+  .eve   .shift-tag{color:var(--eve);   background:var(--eve-soft);}
+  .day-s .shift-tag{color:var(--day);   background:var(--day-soft);}
+  .slots{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+  .slot{position:relative; border:1.5px solid var(--hair); background:#fff; color:var(--ink);
+    border-radius:10px; padding:11px 4px 9px; cursor:pointer; text-align:center;
+    font-size:15px; font-variant-numeric:tabular-nums;
+    font-family:ui-monospace,"SF Mono",Menlo,monospace; transition:transform .06s, border-color .12s;}
+  .slot:hover{border-color:var(--teal); transform:translateY(-1px);}
+  .slot:focus-visible{outline:2px solid var(--teal); outline-offset:2px;}
+  .slot .sub{display:block; font-size:10px; margin-top:3px;
+    font-family:"PingFang TC","Noto Sans TC",sans-serif; color:var(--muted);}
+  .slot.taken{background:var(--taken-bg); color:var(--taken-ink); border-color:var(--taken-bg); cursor:not-allowed;}
+  .slot.taken:hover{transform:none; border-color:var(--taken-bg);}
+  .slot.taken .sub{color:var(--taken-ink);}
+  .slot.mine{background:var(--teal); color:#fff; border-color:var(--teal);}
+  .slot.mine .sub{color:#D6F1EC;}
+  .slot.mine:hover{border-color:var(--teal-dark); background:var(--teal-dark);}
+
+  footer{position:fixed; left:0; right:0; bottom:0; background:rgba(255,255,255,.95);
+    backdrop-filter:blur(8px); border-top:1px solid var(--hair); padding:12px 16px;
+    text-align:center; font-size:13px; color:var(--muted);}
+  footer b{color:var(--ink);}
+
+  .overlay{position:fixed; inset:0; background:rgba(20,30,40,.42); display:none;
+    align-items:center; justify-content:center; padding:24px; z-index:50;}
+  .overlay.show{display:flex;}
+  .modal{background:#fff; border-radius:16px; padding:22px; width:100%; max-width:340px;
+    box-shadow:0 20px 50px rgba(0,0,0,.2);}
+  .modal h3{margin:0 0 6px; font-size:17px;}
+  .modal p{margin:0 0 18px; font-size:14px; color:var(--muted);}
+  .modal .big{color:var(--ink); font-weight:700; font-size:16px;}
+  .modal-actions{display:flex; gap:10px;}
+  .btn{flex:1; padding:12px; border-radius:10px; font-size:15px; font-weight:600; border:none; cursor:pointer;}
+  .btn-ghost{background:#F1F4F6; color:var(--muted);}
+  .btn-primary{background:var(--teal); color:#fff;} .btn-primary:hover{background:var(--teal-dark);}
+  .btn-danger{background:#C0473D; color:#fff;}
+
+  /* 考核單 */
+  .sheet{max-width:520px; max-height:84vh; overflow:auto; text-align:left; padding:0;}
+  .form-paper{padding:28px 30px;}
+  .form-paper .fp-head{text-align:center; border-bottom:2px solid var(--ink); padding-bottom:10px; margin-bottom:16px;}
+  .form-paper .fp-head .org{font-size:12px; color:var(--muted); letter-spacing:1px;}
+  .form-paper .fp-head .ttl{font-size:20px; font-weight:700; margin-top:2px;}
+  .fp-meta{display:grid; grid-template-columns:1fr 1fr; gap:8px 18px; font-size:14px; margin-bottom:18px;}
+  .fp-meta div{border-bottom:1px solid var(--hair); padding:6px 2px;}
+  .fp-meta span{color:var(--muted); margin-right:8px;}
+  .fp-table{width:100%; border-collapse:collapse; font-size:13.5px; margin-bottom:18px;}
+  .fp-table th,.fp-table td{border:1px solid #C9D2D9; padding:8px 10px; text-align:left;}
+  .fp-table th{background:#F2F5F7; font-weight:600;}
+  .fp-block{font-size:14px; margin-bottom:16px;}
+  .fp-block .lbl{font-weight:600; margin-bottom:6px;}
+  .fp-block .box{border:1px solid var(--hair); border-radius:8px; min-height:70px;}
+  .fp-note{font-size:12px; color:var(--muted); margin:18px 0 8px;}
+  .fp-sign-grid{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:6px;}
+  .sig-cap{font-size:12px; color:var(--muted); margin-bottom:5px; font-weight:600;}
+  .sig-pad{width:100%; height:96px; border:1px solid #C9D2D9; border-radius:8px; background:#fff;
+    touch-action:none; display:block; cursor:crosshair;}
+  .sig-clear{margin-top:5px; font-size:11px; color:var(--muted); background:none;
+    border:1px solid var(--hair); border-radius:99px; padding:3px 10px; cursor:pointer;}
+  .sig-wrap.dim{opacity:.4; pointer-events:none;}
+  /* 兩階段切換 */
+  .stage-tabs{display:flex; gap:8px; margin:16px 0 14px;}
+  .stage-tab{flex:1; padding:10px 6px; border:1px solid var(--hair); border-radius:9px; background:#fff;
+    font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; line-height:1.3;}
+  .stage-tab.active{background:var(--teal-soft); color:var(--teal-dark); border-color:var(--teal);}
+  .stage-tab small{display:block; font-weight:500; font-size:10.5px; opacity:.8;}
+  /* 評分表 */
+  .score-table{width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:8px; table-layout:fixed;}
+  .score-table th,.score-table td{border:1px solid #D2DAE0; padding:6px 6px; vertical-align:middle; word-break:break-word;}
+  .score-table th{background:#F2F5F7; font-weight:600; font-size:11px; text-align:center;}
+  .score-table th.tw{width:auto;} .score-table col.cw{width:30px;} .score-table col.iw{width:46px;}
+  .score-table .cat td{background:#E7F0F3; font-weight:700;}
+  .score-table .subh td{background:#F4F8F9; font-weight:600; color:var(--muted); font-size:11.5px;}
+  .score-table .note-row td{background:#FBF6EE; color:#9A5B2A; font-size:11px;}
+  .score-table td.c{text-align:center; color:var(--muted);}
+  .score-inp{width:100%; padding:5px 0; text-align:center; border:1px solid #C9D2D9; border-radius:6px;
+    font-size:13px; font-family:inherit;}
+  .score-inp:disabled{background:#F1F4F6; color:#9AA6B2;}
+  .subtotal td{background:#FAFCFC; font-weight:700; text-align:center;}
+  .subtotal td.lbl{text-align:right;}
+  .grand{display:flex; justify-content:space-between; gap:12px; margin:4px 2px 16px; font-size:14px; font-weight:700;}
+  .grand b{color:var(--teal-dark);}
+  .fb-area{width:100%; min-height:60px; border:1px solid var(--hair); border-radius:8px; padding:8px;
+    font:inherit; font-size:13px; resize:vertical; box-sizing:border-box;}
+  .form-actions{padding:14px 22px 20px;}
+
+  .toast{position:fixed; left:50%; bottom:80px; transform:translateX(-50%) translateY(20px);
+    background:#1F2A37; color:#fff; padding:11px 18px; border-radius:999px; font-size:13.5px;
+    opacity:0; pointer-events:none; transition:.25s; z-index:60; max-width:90%;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+
+  /* 列印：只印考核單 */
+  @media print{
+    body *{visibility:hidden;}
+    #formSheet, #formSheet *{visibility:visible;}
+    #formOverlay{position:static; background:none; padding:0; display:block;}
+    #formSheet{position:absolute; left:0; top:0; max-width:none; max-height:none;
+      box-shadow:none; border-radius:0;}
+    .form-actions{display:none;}
+    .no-print{display:none!important;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-inner">
+    <div class="title">考核會談時段預約<small>嘉義基督教醫院急診　每場 15 分鐘</small></div>
+    <button class="admin-toggle" id="adminBtn">管理檢視</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="field-label">請選擇您的姓名（依職類分組）</div>
+    <select id="userSelect"><option value="">— 請選擇 —</option></select>
+    <div class="role-line" id="roleLine"></div>
+    <input id="userEmail" class="email-inp" type="email" inputmode="email"
+           placeholder="您的 email（用來寄預約確認信）" autocomplete="email" style="display:none">
+    <div class="status empty" id="status"><span class="dot"></span><span id="statusText">尚未選擇姓名</span></div>
+    <div class="actions" id="actions"></div>
+  </div>
+
+  <div class="admin-box" id="adminBox"></div>
+  <div id="board"></div>
+</div>
+
+<footer>本週共開放 <b id="totalSlots">0</b> 格 · 尚餘 <b id="freeSlots">0</b> 格 · 待預約 <b id="pendingPeople">0</b> 人</footer>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="mTitle">確認預約</h3>
+    <p id="mBody"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="mCancel">返回</button>
+      <button class="btn btn-primary" id="mOk">確認</button>
+    </div>
+  </div>
+</div>
+
+<!-- 考核單 -->
+<div class="overlay" id="formOverlay">
+  <div class="modal sheet" id="formSheet">
+    <div class="form-paper" id="formBody"></div>
+    <div class="form-actions modal-actions">
+      <button class="btn btn-ghost" id="formClose">關閉</button>
+      <button class="btn btn-primary" id="formPrint">列印 / 存成 PDF</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===================================================================
+   示範資料：上線時 → 名單匯入 73 人、日期由管理頁設定、
+   bookings 改由後端（GAS+Sheets 或 Firebase）同步並負責「鎖定」與「寄信」
+=================================================================== */
+const SHIFTS=[
+  {key:'night',cls:'night',label:'大夜',win:'08:30–09:30',times:['08:30','08:45','09:00','09:15']},
+  {key:'eve',  cls:'eve',  label:'小夜',win:'14:30–15:30',times:['14:30','14:45','15:00','15:15']},
+  {key:'day',  cls:'day-s',label:'白班',win:'16:30–17:30',times:['16:30','16:45','17:00','17:15']},
+];
+const SHIFT_BY=Object.fromEntries(SHIFTS.map(s=>[s.key,s]));
+
+// 職類代碼 → 顯示名稱（roster 的 role 欄存代碼）
+const ROLES={ HN:'護理長', AHN:'副護理長', leader:'小組長', rn:'護理師',
+              tech:'急診技術員', an:'急診助理員', clerk:'事務員' };
+const roleLabel=c=>ROLES[c]||c;
+const ROLE_ORDER=['HN','AHN','leader','rn','tech','an','clerk'];
+
+/* ★★★ 連線設定 ★★★
+   貼上你部署 Apps Script 後拿到的 /exec 網址，預約頁就會連到你的 Google Sheet。
+   例：const API_URL='https://script.google.com/macros/s/AKfycb..../exec';
+   留空白則顯示下方示範資料（不連後端）。 */
+const API_URL='https://script.google.com/macros/s/AKfycbzH-fwi4ccoL_nXj70IiYRzXdfuXfe_c4qfkxb4-YeXKjr_Gwc8PMvbedtwTAJ0Sh4/exec';
+
+// 執行期資料（連線後由後端覆蓋；空白時用示範資料）
+let ROSTER=[], DAYS=[], bookings={}, ROLE_DIST=[];
+const LIVE = !!API_URL;
+
+function computeRoleDist(){
+  const c={}; ROSTER.forEach(p=>c[p.role]=(c[p.role]||0)+1);
+  ROLE_DIST=ROLE_ORDER.filter(r=>c[r]).map(r=>({role:r,n:c[r]}));
+  Object.keys(c).forEach(r=>{ if(!ROLE_ORDER.includes(r)) ROLE_DIST.push({role:r,n:c[r]}); });
+}
+
+/* ---------- 與後端溝通：GET 讀 / POST 寫（text/plain 免 CORS 預檢） ---------- */
+async function api(payload){
+  if(!payload){ const r=await fetch(API_URL); return r.json(); }
+  const r=await fetch(API_URL,{method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload)});
+  return r.json();
+}
+function buildDays(open){               // open:[{date,shift,wd}] → 依日期彙整
+  const map={}, order={night:0,eve:1,day:2};
+  open.forEach(o=>{ if(!map[o.date]) map[o.date]={date:o.date,wd:o.wd,shifts:[]};
+    if(!map[o.date].shifts.includes(o.shift)) map[o.date].shifts.push(o.shift); });
+  return Object.values(map).sort((a,b)=>a.date<b.date?-1:1).map(d=>{
+    const [,M,D]=d.date.split('-'); d.d=(+M)+'/'+(+D);
+    d.shifts.sort((x,y)=>order[x]-order[y]); return d; });
+}
+async function loadFromServer(){
+  try{
+    const d=await api();
+    ROSTER=d.roster||[]; DAYS=buildDays(d.open||[]);
+    bookings=Object.assign({}, d.bookings||{});
+    computeRoleDist(); buildUserSelect(); render();
+  }catch(e){ toast('連線失敗，請重新整理頁面'); }
+}
+async function pollBookings(){
+  try{ const d=await api(); bookings=Object.assign({}, d.bookings||{}); render(); }catch(e){}
+}
+
+/* ---------- 示範資料（API_URL 空白時用，方便預覽） ---------- */
+function loadDemo(){
+  const DEMO=[{role:'AHN',n:2},{role:'leader',n:6},{role:'rn',n:52},{role:'tech',n:6},{role:'an',n:4},{role:'clerk',n:3}];
+  const SUR='陳林黃張李王吳劉蔡楊許鄭謝洪曾廖賴周徐蘇'.split('');
+  const GIV=['雅文','佳穎','柏宇','育誠','宛蓉','詩涵','承恩','欣怡','冠廷','家瑜','智明','雅筑','宗翰','庭瑜','志偉','品潔','怡君','建宏','曉琪','俊傑'];
+  ROSTER=[]; let gi=0;
+  DEMO.forEach(r=>{ for(let k=0;k<r.n;k++){
+    const name=SUR[gi%SUR.length]+GIV[Math.floor(gi/SUR.length)%GIV.length];
+    ROSTER.push({name,role:r.role}); gi++; } });
+  DAYS=[['2026-06-23','週二'],['2026-06-24','週三'],['2026-06-25','週四'],
+        ['2026-06-26','週五'],['2026-06-29','週一'],['2026-06-30','週二']]
+    .map(([date,wd])=>{ const [,M,D]=date.split('-'); return {date,wd,d:(+M)+'/'+(+D),shifts:['night','eve','day']}; });
+  bookings={};
+  [['2026-06-23_night_08:30',8],['2026-06-23_day_16:30',15],['2026-06-24_eve_14:45',0],
+   ['2026-06-25_night_09:00',30],['2026-06-26_day_17:15',45],['2026-06-29_eve_15:00',60]]
+   .forEach(([id,idx])=>{ bookings[id]={...ROSTER[idx]}; });
+  computeRoleDist();
+}
+
+let currentUser=null, adminMode=false;
+const $=id=>document.getElementById(id);
+const slotId=(date,sk,t)=>`${date}_${sk}_${t}`;
+function myBooking(){ if(!currentUser) return null;
+  return Object.keys(bookings).find(k=>bookings[k].name===currentUser.name)||null; }
+function labelOf(id){ const [date,sk,t]=id.split('_');
+  const day=DAYS.find(d=>d.date===date), sh=SHIFTS.find(s=>s.key===sk);
+  return `${day.d} ${day.wd}　${sh.label} ${t}`; }
+
+/* ---------- 行事曆：時間換算（台北 UTC+8，無日光節約） ---------- */
+function slotDateTimes(id){
+  const [date,,t]=id.split('_'); const [Y,M,D]=date.split('-').map(Number);
+  const [h,m]=t.split(':').map(Number);
+  const start=new Date(Date.UTC(Y,M-1,D,h-8,m));      // 台北 → UTC
+  return {start, end:new Date(start.getTime()+15*60000)};
+}
+function fmtUTC(dt){ const p=n=>String(n).padStart(2,'0');
+  return dt.getUTCFullYear()+p(dt.getUTCMonth()+1)+p(dt.getUTCDate())+'T'
+        +p(dt.getUTCHours())+p(dt.getUTCMinutes())+'00Z'; }
+function gcalUrl(id){
+  const {start,end}=slotDateTimes(id);
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+    +'&text='+encodeURIComponent('考核會談 · '+currentUser.name)
+    +'&dates='+fmtUTC(start)+'/'+fmtUTC(end)
+    +'&details='+encodeURIComponent('職類：'+currentUser.role+'　請攜帶考核單')
+    +'&location='+encodeURIComponent('急診 護理長室');
+}
+function downloadICS(id){
+  const {start,end}=slotDateTimes(id);
+  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//cych//review//TW','BEGIN:VEVENT',
+    'UID:'+id+'-'+Date.now()+'@cych','DTSTAMP:'+fmtUTC(new Date()),
+    'DTSTART:'+fmtUTC(start),'DTEND:'+fmtUTC(end),
+    'SUMMARY:考核會談 · '+currentUser.name,
+    'DESCRIPTION:職類：'+currentUser.role+'　請攜帶考核單',
+    'LOCATION:急診 護理長室','END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar;charset=utf-8'}));
+  a.download='考核會談_'+currentUser.name+'.ics'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+/* ---------- 考核單（瀏覽器列印 / 存 PDF；上線可改 GAS 產 PDF 寄信） ---------- */
+/* ---------- 簽名板：手指 / 觸控筆，免硬體 ---------- */
+function initSignaturePad(id){
+  const canvas=document.getElementById(id);
+  const ratio=Math.max(window.devicePixelRatio||1,1);
+  const rect=canvas.getBoundingClientRect();
+  canvas.width=rect.width*ratio; canvas.height=rect.height*ratio;
+  const ctx=canvas.getContext('2d'); ctx.scale(ratio,ratio);
+  ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#16202B';
+  let drawing=false,last=null;
+  const pos=e=>{ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
+  canvas.addEventListener('pointerdown',e=>{ drawing=true; last=pos(e); canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove',e=>{ if(!drawing)return; const p=pos(e);
+    ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; e.preventDefault(); });
+  canvas.addEventListener('pointerup',()=>drawing=false);
+  canvas.addEventListener('pointercancel',()=>drawing=false);
+  canvas._clear=()=>ctx.clearRect(0,0,canvas.width,canvas.height);
+  canvas._data=()=>canvas.toDataURL('image/png');   // 上線時把這個 base64 連同表單 POST 給 GAS
+}
+
+/* ===================================================================
+   護理師考核表（真實配分，取自上傳表單 2025-06-11(4修)）
+   其他職類結構相同，待此份確認後依樣複製
+=================================================================== */
+const FORM_RN={ title:'護理師（士）考核表', cats:[
+  {name:'臨床業務',full:55,groups:[
+    {sub:'病人照護',items:[
+      {t:'能正確執行三班病人照護及各項業務工作，並依科室需求配合主管調動，協助其它單位。',p:10},
+      {t:'能與醫療團隊合作與討論提升病人照護品質。',p:5},
+      {t:'確實依循相關作業標準書執行臨床病人照護。',p:5},
+    ]},
+    {sub:'臨床各項品質',items:[
+      {t:'通過單位各項測試（含筆試、口試或技術考），未達閾值時能主動找評核者複評並通過。',p:5},
+      {t:'參與護理部及科室內品質推動、教學活動及相關會議。',p:5},
+      {t:'配合護理部進階制度，完成該年資應進階之職級，並參與相關職級業務。',p:5},
+      {t:'正確完成病歷書寫規範（如護理記錄、評估表單等）。',p:5},
+      {t:'依規定正確完成點班並追蹤異常狀況並紀錄，妥善管理財產避免遺失或不當損傷。',p:5},
+      {t:'落實成本管控，遵循科室物品使用管理規範，並每日正確完成計價。',p:5},
+      {t:'遵守 6S 原則，下班前能完成整理並清潔工作車或管轄環境。',p:5},
+    ]},
+  ]},
+  {name:'敬業態度',full:25,groups:[
+    {items:[
+      {t:'遵守醫院出勤原則（準時上下班、刷卡、請假、配戴識別證…）。',p:10},
+      {t:'遵守單位排派班原則。',p:5},
+      {t:'依規定或需要出席相關會議與活動。',p:2},
+      {t:'服裝儀容合乎規定。',p:2},
+      {t:'配合主管執行單位各小組運作及完成臨時交辦業務，年度計畫如期完成。',p:2},
+      {t:'對主管或同儕態度合宜。',p:4},
+      {note:'未依進度完成 PGYN 手冊者，敬業態度得分為 0。'},
+    ]},
+  ]},
+  {name:'教與學',full:14,groups:[
+    {items:[
+      {t:'參加委員會、品質改善活動、夜護、小組長、當班 L 或幹部等職務。',p:2},
+      {t:'在職教育時數依規定完成。',p:2},
+      {t:'參與教學（積極投入院內外教學活動）。',p:2},
+      {t:'帶新人，每人加 2 分。',p:2},
+      {t:'能依任務完成工作（如 PGYN 學員、臨床教師如期協助完成手冊…）。',p:2},
+      {t:'學術報告送院內或學會審查。',p:2},
+      {t:'輔導人員完成學術報告並送審。',p:2},
+    ]},
+  ]},
+  {name:'主管加分',full:6,groups:[
+    {items:[
+      {t:'家屬指名讚美每次加 1 分，最多加 2 分。',p:6},
+      {t:'通過外部稽核者，每次加 2 分。',p:0},
+      {t:'參與科室醫院評鑑之準備。',p:0},
+      {t:'其他：',p:0},
+    ]},
+  ]},
+]};
+
+let formStage=1; // 1=員工自評  2=主管評核
+
+function buildScoreTable(form){
+  let html='<table class="score-table"><colgroup><col class="tw"><col class="cw"><col class="iw"><col class="iw"></colgroup>'
+    +'<thead><tr><th>考核項目</th><th>配分</th><th>自評</th><th>主管<br>評核</th></tr></thead><tbody>';
+  form.cats.forEach((c,ci)=>{
+    html+=`<tr class="cat"><td>${c.name}</td><td class="c">${c.full}</td><td class="c"></td><td class="c"></td></tr>`;
+    c.groups.forEach(g=>{
+      if(g.sub) html+=`<tr class="subh"><td colspan="4">${g.sub}</td></tr>`;
+      let n=0;
+      g.items.forEach(it=>{
+        if(it.note){ html+=`<tr class="note-row"><td colspan="4">※ ${it.note}</td></tr>`; return; }
+        n++;
+        const mx=it.p>0?it.p:c.full;
+        html+=`<tr><td>${n}. ${it.t}</td><td class="c">${it.p>0?it.p:'—'}</td>
+          <td><input class="score-inp self" data-cat="${ci}" type="number" min="0" max="${mx}" inputmode="numeric"></td>
+          <td><input class="score-inp sup"  data-cat="${ci}" type="number" min="0" max="${mx}" inputmode="numeric"></td></tr>`;
+      });
+    });
+    html+=`<tr class="subtotal"><td class="lbl">${c.name} 小計</td><td>${c.full}</td>
+      <td id="catself${ci}">0</td><td id="catsup${ci}">0</td></tr>`;
+  });
+  html+='</tbody></table>'
+    +'<div class="grand"><span>自評總分 <b id="selfTotal">0</b> / 100</span>'
+    +'<span>主管評核總分 <b id="supTotal">0</b> / 100</span></div>';
+  return html;
+}
+function recalcForm(){
+  let st=0,mt=0;
+  FORM_RN.cats.forEach((c,ci)=>{
+    let s=0,m=0;
+    document.querySelectorAll(`.self[data-cat="${ci}"]`).forEach(i=>s+=(+i.value||0));
+    document.querySelectorAll(`.sup[data-cat="${ci}"]`).forEach(i=>m+=(+i.value||0));
+    s=Math.min(s,c.full); m=Math.min(m,c.full);
+    const se=$('catself'+ci), me=$('catsup'+ci);
+    if(se) se.textContent=s; if(me) me.textContent=m;
+    st+=s; mt+=m;
+  });
+  if($('selfTotal')) $('selfTotal').textContent=st;
+  if($('supTotal'))  $('supTotal').textContent=mt;
+}
+function setStage(s){
+  formStage=s;
+  document.getElementById('tab1').classList.toggle('active',s===1);
+  document.getElementById('tab2').classList.toggle('active',s===2);
+  document.querySelectorAll('.self').forEach(i=>i.disabled=(s!==1));
+  document.querySelectorAll('.sup').forEach(i=>i.disabled=(s!==2));
+  document.getElementById('wrap1').classList.toggle('dim',s!==1); // 受考人簽名僅階段1
+  document.getElementById('wrap2').classList.toggle('dim',s!==2); // 主管簽名僅階段2
+}
+
+function openForm(id){
+  const isRN = currentUser.role==='rn';
+  const datePart=labelOf(id).split('　')[0], timePart=labelOf(id).split('　')[1];
+  const body = isRN ? buildScoreTable(FORM_RN)
+    : `<div class="fp-note">「${roleLabel(currentUser.role)}」考核單範本下一步補上，欄位與計分結構與護理師相同（此處先示意流程與簽名）。</div>`;
+  $('formBody').innerHTML=`
+    <div class="fp-head"><div class="org">嘉義基督教醫院　急診　護理部</div>
+      <div class="ttl">${isRN?FORM_RN.title:roleLabel(currentUser.role)+'考核表'}</div></div>
+    <div class="fp-meta">
+      <div><span>姓名</span>${currentUser.name}</div>
+      <div><span>職類</span>${roleLabel(currentUser.role)}</div>
+      <div><span>單位</span>急診</div>
+      <div><span>會談日期</span>${datePart}（${timePart}）</div>
+    </div>
+    <div class="stage-tabs no-print">
+      <button class="stage-tab active" id="tab1">① 員工自評<small>本人填寫＋本人簽名</small></button>
+      <button class="stage-tab" id="tab2">② 主管評核<small>護理長填寫＋護理長簽名</small></button>
+    </div>
+    ${body}
+    <div class="fp-block"><div class="lbl">雙向回饋</div><textarea class="fb-area"></textarea></div>
+    <div class="fp-note no-print">在「自己負責的階段」簽名：員工於①簽受考人欄、護理長於②簽主管欄。可用手指或觸控筆，簽錯按清除。</div>
+    <div class="fp-sign-grid" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="sig sig-wrap" id="wrap1"><div class="sig-cap">受考人簽名</div>
+        <canvas class="sig-pad" id="sig1"></canvas>
+        <button class="sig-clear no-print" data-pad="sig1">清除</button></div>
+      <div class="sig sig-wrap" id="wrap2"><div class="sig-cap">單位主管（護理長）</div>
+        <canvas class="sig-pad" id="sig2"></canvas>
+        <button class="sig-clear no-print" data-pad="sig2">清除</button></div>
+      <div class="sig sig-wrap dim" id="wrap3"><div class="sig-cap">單位上一級主管<br><small style="color:#9AA6B2">（督導，視流程）</small></div>
+        <canvas class="sig-pad" id="sig3"></canvas>
+        <button class="sig-clear no-print" data-pad="sig3">清除</button></div>
+    </div>`;
+  $('formOverlay').classList.add('show');
+  initSignaturePad('sig1'); initSignaturePad('sig2'); initSignaturePad('sig3');
+  document.querySelectorAll('.sig-clear').forEach(b=>b.onclick=()=>{
+    const c=document.getElementById(b.dataset.pad); c._clear&&c._clear(); });
+  if(isRN){
+    document.querySelectorAll('.score-inp').forEach(i=>i.oninput=recalcForm);
+    document.getElementById('tab1').onclick=()=>setStage(1);
+    document.getElementById('tab2').onclick=()=>setStage(2);
+    setStage(1);
+  }
+}
+
+/* ---------- 渲染 ---------- */
+function buildUserSelect(){
+  const sel=$('userSelect'); const cur=currentUser?currentUser.name:'';
+  sel.innerHTML='<option value="">— 請選擇 —</option>';
+  ROLE_DIST.forEach(r=>{
+    const og=document.createElement('optgroup'); og.label=`${roleLabel(r.role)}（${r.n}）`;
+    ROSTER.filter(p=>p.role===r.role).forEach(p=>{
+      const o=document.createElement('option'); o.value=p.name; o.textContent=p.name;
+      if(p.name===cur) o.selected=true; og.appendChild(o);
+    }); sel.appendChild(og);
+  });
+}
+function render(){
+  $('roleLine').innerHTML = currentUser ? `職類：<b>${roleLabel(currentUser.role)}</b>` : '';
+  $('userEmail').style.display = currentUser ? 'block' : 'none';
+
+  const st=$('status'), stx=$('statusText'), act=$('actions');
+  st.className='status'; st.querySelector('.mini-cancel')?.remove();
+  const mine=myBooking();
+  act.className='actions'; act.innerHTML='';
+  if(!currentUser){ st.classList.add('empty'); stx.textContent='尚未選擇姓名'; }
+  else if(!mine){ st.classList.add('none'); stx.textContent='您尚未預約，請點選下方時段'; }
+  else{
+    st.classList.add('booked'); stx.innerHTML='您的時段：<b>'+labelOf(mine)+'</b>';
+    const c=document.createElement('button'); c.className='mini-cancel'; c.textContent='取消';
+    c.onclick=()=>askCancel(mine); st.appendChild(c);
+    // 完成後的三顆按鈕
+    act.className='actions show';
+    act.innerHTML=`
+      <a class="act-btn" href="${gcalUrl(mine)}" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>加入 Google 行事曆</a>
+      <button class="act-btn" id="icsBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>下載 .ics</button>
+      <button class="act-btn" id="formBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>考核單</button>`;
+    $('icsBtn').onclick=()=>downloadICS(mine);
+    $('formBtn').onclick=()=>openForm(mine);
+  }
+
+  renderAdmin();
+
+  const board=$('board'); board.innerHTML='';
+  let grand=0;
+  DAYS.forEach(day=>{
+    const dayShifts=(day.shifts||['night','eve','day']).map(k=>SHIFT_BY[k]).filter(Boolean);
+    let taken=0; const total=dayShifts.length*4; grand+=total;
+    dayShifts.forEach(sh=>sh.times.forEach(t=>{ if(bookings[slotId(day.date,sh.key,t)]) taken++; }));
+    const card=document.createElement('div'); card.className='day';
+    card.innerHTML=`<div class="day-head"><span class="day-date">${day.d}</span>
+      <span class="day-wd">${day.wd}</span><span class="day-left">餘 ${total-taken} / ${total}</span></div>`;
+    dayShifts.forEach(sh=>{
+      const block=document.createElement('div'); block.className='shift '+sh.cls;
+      block.innerHTML=`<div class="shift-label"><span class="shift-tag">${sh.label}</span>
+        <span class="shift-win">${sh.win}</span></div>`;
+      const grid=document.createElement('div'); grid.className='slots';
+      sh.times.forEach(t=>{
+        const id=slotId(day.date,sh.key,t), who=bookings[id],
+              isMine=who&&currentUser&&who.name===currentUser.name;
+        const btn=document.createElement('button'); btn.className='slot';
+        if(isMine){ btn.classList.add('mine'); btn.innerHTML=`${t}<span class="sub">您的時段</span>`; }
+        else if(who){ btn.classList.add('taken'); btn.innerHTML=`${t}<span class="sub">${adminMode?who.name:'已約'}</span>`; }
+        else{ btn.innerHTML=`${t}<span class="sub">可預約</span>`; }
+        btn.onclick=()=>onSlot(id,who,isMine); grid.appendChild(btn);
+      });
+      block.appendChild(grid); card.appendChild(block);
+    });
+    board.appendChild(card);
+  });
+
+  const used=Object.keys(bookings).length;
+  $('totalSlots').textContent=grand; $('freeSlots').textContent=grand-used;
+  $('pendingPeople').textContent=ROSTER.length-used;
+}
+
+function renderAdmin(){
+  const box=$('adminBox'); box.classList.toggle('show',adminMode);
+  if(!adminMode){ box.innerHTML=''; return; }
+  const booked=new Set(Object.values(bookings).map(b=>b.name));
+  let rows='<h4>各職類預約進度</h4>';
+  ROLE_DIST.forEach(r=>{
+    const done=ROSTER.filter(p=>p.role===r.role&&booked.has(p.name)).length;
+    rows+=`<div class="role-row"><span class="role-name">${roleLabel(r.role)}</span>
+      <span class="bar"><span style="width:${Math.round(done/r.n*100)}%"></span></span>
+      <span class="role-num">${done}/${r.n}</span></div>`;
+  });
+  let pend='<div class="pending"><h4>尚未預約</h4>';
+  ROLE_DIST.forEach(r=>{
+    const list=ROSTER.filter(p=>p.role===r.role&&!booked.has(p.name)).map(p=>p.name);
+    if(list.length) pend+=`<div class="grp"><b>${roleLabel(r.role)}</b> <span>(${list.length})：${list.join('、')}</span></div>`;
+  });
+  box.innerHTML=rows+pend+'</div>';
+}
+
+function onSlot(id,who,isMine){
+  if(!currentUser){ toast('請先在上方選擇您的姓名'); return; }
+  if(isMine){ askCancel(id); return; }
+  if(who){ toast('這個時段已被預約，請改選其他'); return; }
+  const mine=myBooking();
+  if(mine) confirmBox('更改時段','您已預約 <span class="big">'+labelOf(mine)+'</span><br>要改為 <span class="big">'+labelOf(id)+'</span> 嗎？', ()=>commitBook(id));
+  else     confirmBox('確認預約','確認預約　<span class="big">'+labelOf(id)+'</span>？<br><span style="font-size:13px">送出後此時段即固定為您所有。</span>', ()=>commitBook(id));
+}
+function commitBook(id){
+  if(LIVE){
+    const email=$('userEmail').value.trim();
+    api({action:'book',slotId:id,name:currentUser.name,role:currentUser.role,email})
+      .then(r=>{
+        if(r&&r.ok){ toast('預約成功 · '+labelOf(id)); pollBookings(); }
+        else if(r&&r.reason==='taken'){ toast('這個時段剛被選走，請改選其他'); pollBookings(); }
+        else if(r&&r.reason==='busy'){ toast('系統忙碌，請再按一次'); }
+        else toast('預約失敗，請再試一次');
+      }).catch(()=>toast('連線失敗，請再試一次'));
+  }else{ // 示範模式
+    const mine=myBooking(); if(mine) delete bookings[mine];
+    bookings[id]={...currentUser}; render(); toast('預約成功 · '+labelOf(id));
+  }
+}
+function askCancel(id){ confirmBox('取消時段','要取消 <span class="big">'+labelOf(id)+'</span> 嗎？取消後此格會重新開放。', ()=>{
+  if(LIVE){ api({action:'cancel',slotId:id,name:currentUser.name})
+    .then(()=>{ toast('已取消預約'); pollBookings(); }).catch(()=>toast('連線失敗，請再試一次')); }
+  else{ delete bookings[id]; render(); toast('已取消預約'); }
+}, true); }
+
+let okHandler=null;
+function confirmBox(title,html,onOk,danger){
+  $('mTitle').textContent=title; $('mBody').innerHTML=html;
+  const ok=$('mOk'); ok.textContent=danger?'確認取消':'確認';
+  ok.className='btn '+(danger?'btn-danger':'btn-primary');
+  okHandler=onOk; $('overlay').classList.add('show');
+}
+$('mOk').onclick=()=>{ $('overlay').classList.remove('show'); okHandler&&okHandler(); };
+$('mCancel').onclick=()=>$('overlay').classList.remove('show');
+$('overlay').onclick=e=>{ if(e.target===$('overlay')) $('overlay').classList.remove('show'); };
+$('formClose').onclick=()=>$('formOverlay').classList.remove('show');
+$('formPrint').onclick=()=>window.print();
+$('formOverlay').onclick=e=>{ if(e.target===$('formOverlay')) $('formOverlay').classList.remove('show'); };
+
+let toastTimer=null;
+function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2200); }
+
+$('userSelect').onchange=e=>{ currentUser=ROSTER.find(p=>p.name===e.target.value)||null; render(); };
+$('adminBtn').onclick=()=>{ adminMode=!adminMode; $('adminBtn').classList.toggle('on',adminMode);
+  $('adminBtn').textContent=adminMode?'結束檢視':'管理檢視'; render(); };
+
+// 啟動：有設 API_URL 就連後端＋每5秒輪詢；否則顯示示範資料
+if(LIVE){ loadFromServer(); setInterval(pollBookings,5000); }
+else{ loadDemo(); buildUserSelect(); render(); }
+</script>
+</body>
+</html>
