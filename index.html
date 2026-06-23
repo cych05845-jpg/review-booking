@@ -1258,13 +1258,8 @@ function buildOfficialPrint(){
           lines.push(`<td>${it.t}</td><td class="c">${it.p>0?it.p:'—'}</td><td class="c">${selfMap[key]||''}</td><td class="c">${supMap[key]||''}</td>`);
         });
       });
-      let sSum=0,mSum=0;
-      document.querySelectorAll(`.score-inp.self[data-cat="${ci}"]`).forEach(i=>sSum+=(+i.value||0));
-      document.querySelectorAll(`.score-inp.sup[data-cat="${ci}"]`).forEach(i=>mSum+=(+i.value||0));
-      sSum=Math.min(sSum,c.full); mSum=Math.min(mSum,c.full);
-      lines.push(`<td class="pd-sub">小計</td><td class="c pd-sub">${c.full}</td><td class="c pd-sub">${sSum}</td><td class="c pd-sub">${mSum}</td>`);
       lines.forEach((ln,idx)=>{
-        rows+= '<tr>' + (idx===0?`<td class="cat" rowspan="${lines.length}">${c.name}</td>`:'') + ln + '</tr>';
+        rows+= '<tr>' + (idx===0?`<td class="cat" rowspan="${lines.length}">${c.name}（${c.full}）</td>`:'') + ln + '</tr>';
       });
     });
   }
