@@ -219,24 +219,27 @@
   /* 列印：只印考核單 */
   /* 官方格式列印文件（螢幕上移到畫面外，列印時才顯示） */
   #printDoc{position:fixed; left:-99999px; top:0; width:100%; background:#fff; color:#000;}
-  .pd-wrap{padding:10px 14px; font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif; color:#000;}
-  .pd-head{text-align:center; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:8px;}
-  .pd-org{font-size:12px;} .pd-title{font-size:18px; font-weight:700;}
-  .pd-meta{font-size:12.5px; margin-bottom:8px; display:flex; flex-wrap:wrap; gap:4px 18px;}
-  .pd-table{width:100%; border-collapse:collapse; font-size:11px;}
-  .pd-table th,.pd-table td{border:1px solid #000; padding:3px 5px; vertical-align:middle;}
+  @page{ size:A4; margin:8mm; }
+  #printDoc{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .pd-wrap{padding:0 2px; font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif; color:#000; line-height:1.15;}
+  .pd-head{text-align:center; border-bottom:1.5px solid #000; padding-bottom:2px; margin-bottom:4px;}
+  .pd-org{font-size:10px;} .pd-title{font-size:15px; font-weight:700;}
+  .pd-meta{font-size:10.5px; margin-bottom:4px; display:flex; flex-wrap:wrap; gap:1px 14px;}
+  .pd-table{width:100%; border-collapse:collapse; font-size:9px;}
+  .pd-table th,.pd-table td{border:1px solid #000; padding:1px 4px; vertical-align:middle; line-height:1.1;}
   .pd-table th{background:#eee; text-align:center; font-weight:700;}
+  .pd-table tr{break-inside:avoid; page-break-inside:avoid;}
   .pd-table .cat{writing-mode:vertical-rl; text-align:center; font-weight:700; width:22px; letter-spacing:2px;}
   .pd-table .c{text-align:center;}
   .pd-sub{font-weight:700; background:#f6f6f6;}
   .pd-note{background:#faf6ee; color:#7a4a17; font-size:10px;}
-  .pd-tot{display:flex; gap:24px; font-size:12.5px; font-weight:700; margin:8px 2px;}
-  .pd-block{font-size:12px; margin:6px 0;}
-  .pd-block .l{font-weight:700;} .pd-block .b{border:1px solid #000; min-height:36px; padding:4px 6px; white-space:pre-wrap;}
-  .pd-sign{display:flex; gap:10px; margin-top:12px;}
-  .pd-sign .col{flex:1; text-align:center; font-size:11px;}
-  .pd-sign .box{border:1px solid #000; height:80px; display:flex; align-items:center; justify-content:center;}
-  .pd-sign .box img{max-width:100%; max-height:76px;}
+  .pd-tot{display:flex; gap:20px; font-size:10.5px; font-weight:700; margin:4px 2px;}
+  .pd-block{font-size:10px; margin:3px 0;}
+  .pd-block .l{font-weight:700;} .pd-block .b{border:1px solid #000; min-height:24px; padding:2px 5px; white-space:pre-wrap;}
+  .pd-sign{display:flex; gap:8px; margin-top:6px; break-inside:avoid; page-break-inside:avoid;}
+  .pd-sign .col{flex:1; text-align:center; font-size:9.5px;}
+  .pd-sign .box{border:1px solid #000; height:56px; display:flex; align-items:center; justify-content:center;}
+  .pd-sign .box img{max-width:100%; max-height:54px;}
   .pd-sign .lab{margin-top:3px;}
   @media print{
     body *{visibility:hidden;}
