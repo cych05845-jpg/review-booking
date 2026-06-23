@@ -90,6 +90,10 @@
   .cfg-save{flex:1; background:var(--teal); color:#fff; border:none; border-radius:9px; padding:11px; font-weight:700; cursor:pointer;}
   .cfg-clear{background:#fff; color:#B4453C; border:1px solid #EBC9C6; border-radius:9px; padding:11px 14px; font-weight:600; cursor:pointer;}
   .cfg-note{font-size:11.5px; color:var(--muted); margin-top:8px;}
+  .ffilter{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;}
+  .fbtn{font-size:12px; padding:5px 11px; border-radius:99px; border:1px solid var(--hair); background:#fff; color:var(--muted); cursor:pointer;}
+  .fbtn.on{background:var(--teal-soft); color:var(--teal-dark); border-color:var(--teal); font-weight:600;}
+  .fsearch{width:100%; padding:9px 11px; border:1px solid var(--hair); border-radius:8px; margin-bottom:6px; font:inherit; box-sizing:border-box;}
   .form-item{display:flex; align-items:center; justify-content:space-between; gap:8px;
     padding:9px 4px; border-bottom:1px solid var(--hair); font-size:13.5px; cursor:pointer;}
   .form-item:hover{background:#F6F9FA;}
@@ -245,6 +249,7 @@
   </div>
 
   <div class="admin-box" id="adminBox"></div>
+  <div class="admin-box" id="formsBox" style="display:none"></div>
   <div class="admin-box" id="cfgBox" style="display:none"></div>
   <div id="board"></div>
 </div>
@@ -540,7 +545,15 @@ function initSignaturePad(id){
   canvas.addEventListener('pointerup',()=>drawing=false);
   canvas.addEventListener('pointercancel',()=>drawing=false);
   canvas._clear=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); canvas._hasInk=false; delete sigDates[id]; showSigDate(id); formDirty=true; };
-  canvas._data=()=>canvas._hasInk?canvas.toDataURL('image/png'):'';
+  canvas._data=()=>{
+    if(!canvas._hasInk) return '';
+    // 縮小＋壓縮：避免簽名 base64 超過 Google 試算表單格 5 萬字上限而存檔失敗
+    const max=300, scale=Math.min(1, max/w), ow=Math.round(w*scale), oh=Math.round(h*scale);
+    const off=document.createElement('canvas'); off.width=ow; off.height=oh;
+    const octx=off.getContext('2d'); octx.fillStyle='#fff'; octx.fillRect(0,0,ow,oh);
+    octx.drawImage(canvas,0,0,ow,oh);
+    return off.toDataURL('image/jpeg',0.7);
+  };
   canvas._load=url=>{ const img=new Image(); img.onload=()=>{ ctx.drawImage(img,0,0,w,h); canvas._hasInk=true; }; img.src=url; };
 }
 function sigData(id){ const c=document.getElementById(id); return (c&&c._data)?c._data():''; }
@@ -1066,9 +1079,46 @@ function render(){
   $('pendingPeople').textContent=ROSTER.length-used;
 }
 
+let formFilter='all', formSearch='';
 async function fetchFormsList(){
   try{ const r=await api({action:'listForms',pass:adminPass});
-    if(r&&r.ok){ formsList=r.list||[]; renderAdmin(); } }catch(e){}
+    if(r&&r.ok){ formsList=r.list||[]; renderAdmin(); renderFormsList(); } }catch(e){}
+}
+function renderFormsList(){
+  const box=$('formsBox'); if(!box) return;
+  if(!(adminMode && (adminLevel==='admin'||adminLevel==='super'))){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='block';
+  const cnt={all:formsList.length, self:0, reviewed:0, sent:0, done:0};
+  formsList.forEach(f=>{ if(cnt[f.stage]!=null) cnt[f.stage]++; });
+  const FILTERS=[['all','全部'],['self','待評核'],['reviewed','評核中'],['sent','待督導簽'],['done','已完成']];
+  let h='<h4>考核表（點名字開啟簽核）</h4>';
+  h+='<div class="ffilter">'+FILTERS.map(([k,lab])=>`<button class="fbtn ${formFilter===k?'on':''}" data-f="${k}">${lab} ${cnt[k]||0}</button>`).join('')+'</div>';
+  h+='<input class="fsearch" id="fSearch" placeholder="搜尋姓名…" value="'+String(formSearch).replace(/"/g,'&quot;')+'">';
+  const order={}; ROLE_ORDER.forEach((r,i)=>order[r]=i);
+  const sorted=[...formsList].sort((a,b)=>(order[a.role]-order[b.role])||(a.name<b.name?-1:1));
+  let li='';
+  sorted.forEach(f=>{ li+=`<div class="form-item" data-slot="${f.slotId}" data-name="${f.name}" data-role="${f.role}" data-stage="${f.stage}">
+      <span><b>${f.name}</b> <span style="color:var(--muted)">${roleLabel(f.role)}</span></span>
+      <span class="fstage ${f.stage}">${stageLabel(f.stage)}</span></div>`; });
+  h+='<div id="fListInner">'+(formsList.length?li:'<div class="cfg-note">目前尚無已存的考核表。</div>')+'</div>';
+  box.innerHTML=h;
+  box.querySelectorAll('.fbtn').forEach(b=>b.onclick=()=>{ formFilter=b.dataset.f;
+    box.querySelectorAll('.fbtn').forEach(x=>x.classList.toggle('on',x===b)); applyFormFilter(); });
+  const si=$('fSearch'); if(si) si.oninput=()=>{ formSearch=si.value; applyFormFilter(); };
+  box.querySelectorAll('.form-item').forEach(el=>el.onclick=()=>{
+    if(adminLevel==='super' && el.dataset.stage!=='sent'){ toast('此表尚未送督導，請待護理長評核並送出後再簽'); return; }
+    openForm(el.dataset.slot, {name:el.dataset.name, role:el.dataset.role}, true);
+  });
+  applyFormFilter();
+}
+function applyFormFilter(){
+  const q=String(formSearch).trim();
+  let shown=0;
+  document.querySelectorAll('#formsBox .form-item').forEach(el=>{
+    const okF=(formFilter==='all'||el.dataset.stage===formFilter);
+    const okS=(!q||el.dataset.name.indexOf(q)>=0);
+    const show=okF&&okS; el.style.display=show?'':'none'; if(show) shown++;
+  });
 }
 function stageLabel(st){ return ({self:'待評核',reviewed:'評核中',sent:'待督導簽',done:'已完成'})[st]||'草稿'; }
 function renderAdmin(){
@@ -1088,18 +1138,6 @@ function renderAdmin(){
     if(list.length) pend+=`<div class="grp"><b>${roleLabel(r.role)}</b> <span>(${list.length})：${list.join('、')}</span></div>`;
   });
   pend+='</div>';
-  // 考核表清單（點名字開啟接續/簽核）— 護理長與督導可用
-  let flist='';
-  if(adminLevel==='admin'||adminLevel==='super'){
-    flist='<div class="pending"><h4>考核表（點名字開啟簽核）</h4>';
-    if(!formsList.length) flist+='<div class="cfg-note">目前尚無已存的考核表。</div>';
-    formsList.forEach(f=>{
-      flist+=`<div class="form-item" data-slot="${f.slotId}" data-name="${f.name}" data-role="${f.role}" data-stage="${f.stage}">
-        <span><b>${f.name}</b> <span style="color:var(--muted)">${roleLabel(f.role)}</span></span>
-        <span class="fstage ${f.stage}">${stageLabel(f.stage)}</span></div>`;
-    });
-    flist+='</div>';
-  }
   // 成績排名 / 送考核（依主管評核總分，標出各職類前5%）— 僅護理長
   let rank='';
   if(adminLevel==='admin'){
@@ -1120,7 +1158,7 @@ function renderAdmin(){
     });
     rank+='</div>';
   }
-  box.innerHTML=rows+pend+flist+rank;
+  box.innerHTML=rows+pend+rank;
   // 綁定點擊 → 開該人考核表
   box.querySelectorAll('.form-item').forEach(el=>el.onclick=()=>{
     if(adminLevel==='super' && el.dataset.stage!=='sent'){
@@ -1238,6 +1276,7 @@ $('adminBtn').onclick=()=>{
   if(adminMode){ // 結束檢視
     adminMode=false; adminBookings=null; adminPass=''; adminLevel='';
     $('cfgBox').style.display='none'; $('cfgBox').innerHTML='';
+    $('formsBox').style.display='none'; $('formsBox').innerHTML='';
     $('adminBtn').classList.remove('on'); $('adminBtn').textContent='管理檢視'; render(); return;
   }
   if(LIVE){ const pw=prompt('請輸入密碼\n護理長 / 督導 / 小組長以上'); if(pw) fetchAdmin(pw,false); }
