@@ -320,10 +320,17 @@ function computeRoleDist(){
 
 /* ---------- 與後端溝通：GET 讀 / POST 寫（text/plain 免 CORS 預檢） ---------- */
 async function api(payload){
-  if(!payload){ const r=await fetch(API_URL); return r.json(); }
-  const r=await fetch(API_URL,{method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload)});
-  return r.json();
+  let lastErr;
+  for(let attempt=0; attempt<3; attempt++){
+    try{
+      const r = payload
+        ? await fetch(API_URL,{method:'POST', redirect:'follow',
+            headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload)})
+        : await fetch(API_URL,{redirect:'follow'});
+      return await r.json();
+    }catch(e){ lastErr=e; await new Promise(res=>setTimeout(res, 600*(attempt+1))); }
+  }
+  throw lastErr;   // 連試3次都失敗才丟出
 }
 function buildDays(open){               // open:[{date,shift,wd}] → 依日期彙整
   const map={}, order={night:0,eve:1,day:2};
@@ -861,6 +868,10 @@ function setStage(s){
   document.querySelectorAll('.sup').forEach(i=>i.disabled=(s!==2));
   document.getElementById('wrap1').classList.toggle('dim',s!==1); // 受考人簽名僅階段1
   document.getElementById('wrap2').classList.toggle('dim',s!==2); // 主管簽名僅階段2
+  // 督導(SV)簽名欄：HN表在②欄、其他表在③欄；非督導登入一律鎖住
+  const svWrap=(formPerson&&formPerson.role==='HN')?'wrap2':'wrap3';
+  const svEl=document.getElementById(svWrap);
+  if(svEl){ if(adminLevel==='super') svEl.classList.remove('dim'); else svEl.classList.add('dim'); }
 }
 
 function openForm(id, person, asAdmin){
@@ -1190,6 +1201,7 @@ const PHRASES=[
 ];
 function renderPhrases(){
   const row=$('phraseRow'); if(!row) return; row.innerHTML='';
+  if(!(adminLevel==='admin'||adminLevel==='super')) return;   // 常用片語只給護理長/督導
   PHRASES.forEach(t=>{ const c=document.createElement('button'); c.type='button'; c.className='phrase-chip';
     c.textContent=t; c.onclick=()=>{ const fb=document.querySelector('.fb-area');
       fb.value += (fb.value && !fb.value.endsWith('\n')?'\n':'')+t; formDirty=true; }; row.appendChild(c); });
