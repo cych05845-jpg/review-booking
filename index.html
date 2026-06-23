@@ -97,6 +97,15 @@
   .form-item{display:flex; align-items:center; justify-content:space-between; gap:8px;
     padding:9px 4px; border-bottom:1px solid var(--hair); font-size:13.5px; cursor:pointer;}
   .form-item:hover{background:#F6F9FA;}
+  .zrow{display:flex; gap:10px; flex-wrap:wrap; margin:6px 0;}
+  .zrow label{font-size:12.5px; color:var(--muted);}
+  .zfoot{display:flex; gap:10px; margin:6px 0;}
+  .zt{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;}
+  .zt th,.zt td{border:1px solid var(--hair); padding:3px 6px; text-align:center;}
+  .zt th{background:#F2F5F7;}
+  .admin-box.collapsed > *:not(h4){ display:none !important; }
+  .admin-box > h4{ cursor:pointer; user-select:none; }
+  .admin-box > h4 .arr{ float:right; color:var(--muted); font-weight:500; font-size:12px; }
   .fstage{font-size:11px; padding:2px 9px; border-radius:99px; background:#EDF0F3; color:var(--muted);}
   .fstage.self{background:#FAF1E4; color:#C2741A;}
   .fstage.done{background:#E3F4F1; color:var(--teal-dark);}
@@ -202,6 +211,7 @@
   .score-inp{width:100%; padding:5px 0; text-align:center; border:1px solid #C9D2D9; border-radius:6px;
     font-size:13px; font-family:inherit;}
   .score-inp:disabled{background:#F1F4F6; color:#9AA6B2;}
+  .hide-sup .supcol{ display:none !important; }
   .subtotal td{background:#FAFCFC; font-weight:700; text-align:center;}
   .subtotal td.lbl{text-align:right;}
   .grand{display:flex; justify-content:space-between; gap:12px; margin:4px 2px 16px; font-size:14px; font-weight:700;}
@@ -270,6 +280,8 @@
 
   <div class="admin-box" id="adminBox"></div>
   <div class="admin-box" id="formsBox" style="display:none"></div>
+  <div class="admin-box" id="zoneBox" style="display:none"></div>
+  <div class="admin-box" id="walkinBox" style="display:none"></div>
   <div class="admin-box" id="cfgBox" style="display:none"></div>
   <div id="board"></div>
 </div>
@@ -331,10 +343,18 @@ const API_URL='https://script.google.com/macros/s/AKfycbzH-fwi4ccoL_nXj70IiYRzXd
 let ROSTER=[], DAYS=[], ROLE_DIST=[];
 let occupied=new Set();   // 已被佔用的 slotId（不含姓名，給所有人）
 let myslot=null;          // 目前使用者自己的時段
+let myFormStage='';       // 本人考核表狀態（鎖定判斷）
+function empFormLocked(){ return ['reviewed','sent','done'].indexOf(myFormStage)>=0; }
 let adminBookings=null;   // slotId→{name,role}，僅通過管理密碼後取得
 let adminPass='';         // 管理密碼（驗證成功後保存，供輪詢更新）
 let adminLevel='';        // 'view'=小組長以上看名單 / 'admin'=護理長 / 'super'=督導
 let formsList=[];         // 考核表清單（護理長/督導用）
+let formZone='';          // 目前開啟考核表的區域
+const GROUPS={ '護理師組':['rn','AHN','leader','tech'], '護佐行政組':['an','clerk'] };
+const ZONE_RATIO={ '護理師組':[10,30,60,0], '護佐行政組':null };  // null=人少手動
+let zoneExpect={ '護理師組':67, '護佐行政組':7 };  // 應評人數(可改)
+let zoneCounts={ '護理師組':[null,null,null,null], '護佐行政組':[1,2,5,0] };
+let zonePreview={};       // name -> 區域(預覽)
 let cfgDraft=[];          // 開放日期編輯暫存 [{date, shifts:[]}]
 const LIVE = !!API_URL;
 
@@ -387,7 +407,7 @@ async function pollBookings(){
 // 取得「自己」的時段（後端只回傳本人那一格，不洩漏他人）
 async function refreshMine(){
   if(!LIVE || !currentUser){ return; }
-  try{ const r=await api({action:'mine',name:currentUser.name}); myslot=r.slotId||null; }catch(e){}
+  try{ const r=await api({action:'mine',name:currentUser.name}); myslot=r.slotId||null; myFormStage=r.stage||''; }catch(e){}
 }
 // 管理檢視：帶密碼向後端要「誰約了哪格」，密碼錯則不給
 async function fetchAdmin(pass,silent){
@@ -398,6 +418,7 @@ async function fetchAdmin(pass,silent){
       if(!silent){
         if(adminLevel==='admin'){ cfgDraft=DAYS.map(d=>({date:d.date,shifts:[...d.shifts]})); buildCfgEditor(); }
         if(adminLevel==='admin'||adminLevel==='super'){ fetchFormsList(); }
+        if(adminLevel==='admin'){ setTimeout(renderZoneBox, 300); }
         toast(adminLevel==='admin'?'已進入管理（護理長）':'已進入檢視');
       }
       render();
@@ -415,16 +436,24 @@ function walkinOptions(){
   return h;
 }
 function buildCfgEditor(){
-  const box=$('cfgBox');
-  if(!(adminMode && adminLevel==='admin')){ box.style.display='none'; box.innerHTML=''; return; }
-  box.style.display='block';
-  cfgDraft.sort((a,b)=>a.date<b.date?-1:1);
-  let rows='<h4>臨時會談（未預約者，直接開表）</h4>'
+  const wbox=$('walkinBox'), box=$('cfgBox');
+  if(!(adminMode && adminLevel==='admin')){
+    wbox.style.display='none'; wbox.innerHTML=''; box.style.display='none'; box.innerHTML=''; return;
+  }
+  // 臨時會談（獨立一塊，預設展開）
+  wbox.style.display='block';
+  wbox.innerHTML='<h4>臨時會談（未預約者，直接開表）</h4>'
     +'<div class="walkin-row"><select id="walkinSel">'+walkinOptions()+'</select>'
     +'<button class="addbtn" id="walkinOpen">開考核表</button></div>'
-    +'<div class="cfg-note">會談日期自動記今天，不佔用預約格；考核表以姓名儲存，之後可接續、列印。</div>'
-    +'<hr style="border:none;border-top:1px solid var(--hair);margin:16px 0">'
-    +'<h4>開放日期管理</h4>';
+    +'<div class="cfg-note">會談日期自動記今天，不佔用預約格；考核表以姓名儲存，之後可接續、列印。</div>';
+  $('walkinOpen').onclick=()=>{ const nm=$('walkinSel').value, pr=ROSTER.find(p=>p.name===nm);
+    if(!pr){ toast('請先選擇人員'); return; }
+    openForm('walkin_'+new Date().toISOString().slice(0,10), pr, true); };
+  applyCollapse('walkinBox');
+  // 開放日期管理（獨立一塊，預設收合）
+  box.style.display='block';
+  cfgDraft.sort((a,b)=>a.date<b.date?-1:1);
+  let rows='<h4>開放日期管理</h4>';
   if(!cfgDraft.length) rows+='<div class="cfg-note">目前沒有開放日期，請於下方新增。</div>';
   cfgDraft.forEach((d,i)=>{
     const [,M,D]=d.date.split('-');
@@ -457,12 +486,8 @@ function buildCfgEditor(){
     cfgDraft.push({date:dt,shifts:sh}); buildCfgEditor();
   };
   $('cfgSave').onclick=saveCfg;
-  $('walkinOpen').onclick=()=>{
-    const nm=$('walkinSel').value, pr=ROSTER.find(p=>p.name===nm);
-    if(!pr){ toast('請先選擇人員'); return; }
-    openForm('walkin_'+new Date().toISOString().slice(0,10), pr, true);
-  };
   $('cfgClear').onclick=clearAll;
+  applyCollapse('cfgBox');
 }
 async function saveCfg(){
   if(!cfgDraft.length){ toast('開放清單是空的，未儲存（避免清空預約日期）'); return; }
@@ -857,9 +882,9 @@ let formStage=1, activeForm=null; // 1=員工自評  2=主管評核
 function buildScoreTable(form){
   const totalFull=form.cats.reduce((a,c)=>a+c.full,0); let ki=0;
   let html='<table class="score-table"><colgroup><col class="tw"><col class="cw"><col class="iw"><col class="iw"></colgroup>'
-    +'<thead><tr><th>考核項目</th><th>配分</th><th>自評</th><th>主管<br>評核</th></tr></thead><tbody>';
+    +'<thead><tr><th>考核項目</th><th>配分</th><th>自評</th><th class="supcol">主管<br>評核</th></tr></thead><tbody>';
   form.cats.forEach((c,ci)=>{
-    html+=`<tr class="cat"><td>${c.name}</td><td class="c">${c.full}</td><td class="c"></td><td class="c"></td></tr>`;
+    html+=`<tr class="cat"><td>${c.name}</td><td class="c">${c.full}</td><td class="c"></td><td class="c supcol"></td></tr>`;
     c.groups.forEach(g=>{
       if(g.sub) html+=`<tr class="subh"><td colspan="4">${g.sub}</td></tr>`;
       let n=0;
@@ -869,15 +894,15 @@ function buildScoreTable(form){
         const mx=it.p>0?it.p:c.full; const key=ci+'-'+(ki++);
         html+=`<tr><td>${n}. ${it.t}</td><td class="c">${it.p>0?it.p:'—'}</td>
           <td><input class="score-inp self" data-cat="${ci}" data-key="${key}" type="number" min="0" max="${mx}" inputmode="numeric"></td>
-          <td><input class="score-inp sup"  data-cat="${ci}" data-key="${key}" type="number" min="0" max="${mx}" inputmode="numeric"></td></tr>`;
+          <td class="supcol"><input class="score-inp sup"  data-cat="${ci}" data-key="${key}" type="number" min="0" max="${mx}" inputmode="numeric"></td></tr>`;
       });
     });
     html+=`<tr class="subtotal"><td class="lbl">${c.name} 小計</td><td>${c.full}</td>
-      <td id="catself${ci}">0</td><td id="catsup${ci}">0</td></tr>`;
+      <td id="catself${ci}">0</td><td class="supcol" id="catsup${ci}">0</td></tr>`;
   });
   html+='</tbody></table>'
     +'<div class="grand"><span>自評總分 <b id="selfTotal">0</b> / ${totalFull}</span>'
-    +'<span>主管評核總分 <b id="supTotal">0</b> / ${totalFull}</span></div>';
+    +'<span class="supcol">主管評核總分 <b id="supTotal">0</b> / ${totalFull}</span></div>';
   return html;
 }
 function recalcForm(){
@@ -935,7 +960,7 @@ function openForm(id, person, asAdmin){
     </div>
     <div class="stage-tabs no-print">
       <button class="stage-tab active" id="tab1">① 員工自評<small>本人填寫＋本人簽名</small></button>
-      <button class="stage-tab" id="tab2">② 主管評核<small>${ev}填寫＋${ev}簽名</small></button>
+      <button class="stage-tab supcol" id="tab2">② 主管評核<small>${ev}填寫＋${ev}簽名</small></button>
     </div>
     ${body}
     <div class="fp-block"><div class="lbl">加分／其他事項備註</div>
@@ -964,6 +989,22 @@ function openForm(id, person, asAdmin){
   const fbEl=document.querySelector('.fb-area'); if(fbEl) fbEl.oninput=()=>{ formDirty=true; };
   const rmEl2=document.querySelector('.remark-area'); if(rmEl2) rmEl2.oninput=()=>{ formDirty=true; };
   initMic(); renderPhrases();
+  // 員工看不到「主管評核」整欄與該頁籤；只有護理長/督導看得到
+  $('formBody').classList.toggle('hide-sup', !(adminLevel==='admin'||adminLevel==='super'));
+  // 主管(你)/督導：在自己的簽名欄加「套用/存為 簽名檔」
+  const mySig = adminLevel==='super' ? (person.role==='HN'?'sig2':'sig3')
+              : adminLevel==='admin' ? 'sig2' : null;
+  if(mySig){
+    const foot=document.querySelector('#wrap'+mySig.slice(3)+' .sig-foot');
+    if(foot){
+      const ap=document.createElement('button'); ap.className='sig-clear no-print'; ap.textContent='套用簽名檔';
+      ap.style.borderColor='var(--teal)'; ap.style.color='var(--teal-dark)';
+      ap.onclick=()=>applyMySig(mySig);
+      const sv=document.createElement('button'); sv.className='sig-clear no-print'; sv.textContent='存為簽名檔';
+      sv.onclick=()=>saveMySig(mySig);
+      foot.insertBefore(sv, foot.firstChild); foot.insertBefore(ap, foot.firstChild);
+    }
+  }
   // 只有護理長（admin）在評核階段才看得到「送督導」
   const sendBtn=$('formSend'); if(sendBtn) sendBtn.style.display=(adminLevel==='admin')?'inline-block':'none';
   // 兩階段切換（所有職類都可用）
@@ -993,11 +1034,24 @@ function applyForm(d){
   }
   const fb=document.querySelector('.fb-area'); if(fb&&d.feedback) fb.value=d.feedback;
   loadSig('sig1',d.sig1); loadSig('sig2',d.sig2); loadSig('sig3',d.sig3);
+  formZone=d.zone||'';
   let sc2={}; try{ sc2=JSON.parse(d.scores||'{}')||{}; }catch(e){}
   if(sc2._sigDates){ sigDates=Object.assign({}, sc2._sigDates); ['sig1','sig2','sig3'].forEach(showSigDate); }
   const rmEl=document.querySelector('.remark-area'); if(rmEl&&sc2._remark) rmEl.value=sc2._remark;
   if(d.stage==='self') toast('已載入員工自評，待會談');
   else if(d.stage==='done') toast('此表已完成（可檢視/列印）');
+}
+function saveMySig(id){
+  const d=sigData(id); if(!d){ toast('請先在此欄簽一次名，再存為簽名檔'); return; }
+  api({action:'saveSig', pass:adminPass, dataURL:d})
+    .then(r=>{ if(r&&r.ok) toast('簽名檔已儲存，下次可一鍵套用'); else toast('儲存失敗'); })
+    .catch(()=>toast('連線失敗'));
+}
+function applyMySig(id){
+  api({action:'getSig', pass:adminPass})
+    .then(r=>{ if(r&&r.ok&&r.dataURL){ loadSig(id, r.dataURL); markSigDate(id); formDirty=true; toast('已套用簽名檔'); }
+               else toast('尚無簽名檔，請先「存為簽名檔」'); })
+    .catch(()=>toast('連線失敗'));
 }
 function saveForm(targetStage){
   if(!formPerson){ toast('沒有開啟中的考核表'); return; }
@@ -1044,7 +1098,8 @@ function render(){
   if(!currentUser){ st.classList.add('empty'); stx.textContent='尚未選擇姓名'; }
   else if(!mine){ st.classList.add('none'); stx.textContent='您尚未預約，請點選下方時段';
     const g=document.createElement('button'); g.className='go-btn'; g.textContent='免預約·直接填表';
-    g.onclick=()=>openForm('walkin_'+new Date().toISOString().slice(0,10), currentUser, false);
+    g.onclick=()=>{ if(empFormLocked()){ toast('考核已進入主管程序，無法開啟'); return; }
+      openForm('walkin_'+new Date().toISOString().slice(0,10), currentUser, false); };
     st.appendChild(g); }
   else{
     st.classList.add('booked'); stx.innerHTML='您的時段：<b>'+labelOf(mine)+'</b>';
@@ -1103,7 +1158,85 @@ function render(){
 let formFilter='all', formSearch='';
 async function fetchFormsList(){
   try{ const r=await api({action:'listForms',pass:adminPass});
-    if(r&&r.ok){ formsList=r.list||[]; renderAdmin(); renderFormsList(); } }catch(e){}
+    if(r&&r.ok){ formsList=r.list||[]; renderAdmin(); renderFormsList(); if(adminLevel==='admin') renderZoneBox(); } }catch(e){}
+}
+function zoneEligible(group){
+  // 已定案(送督導以上)且有分數
+  const roles=GROUPS[group];
+  return formsList.filter(f=>roles.indexOf(f.role)>=0 && (f.stage==='sent'||f.stage==='done')
+    && f.score!==''&&f.score!=null&&!isNaN(+f.score))
+    .map(f=>({name:f.name,role:f.role,score:+f.score}))
+    .sort((a,b)=>b.score-a.score);
+}
+function zoneSuggest(group, n){
+  const r=ZONE_RATIO[group];
+  if(r){ const a=Math.round(n*r[0]/100), b=Math.round(n*r[1]/100); return [a,b,Math.max(0,n-a-b),0]; }
+  return zoneCounts[group].slice();
+}
+function computeZones(group){
+  const list=zoneEligible(group); const c=zoneCounts[group];
+  zonePreview[group]={}; let i=0;
+  ['一區','二區','三區','四區'].forEach((z,zi)=>{ for(let k=0;k<(+c[zi]||0)&&i<list.length;k++){ zonePreview[group][list[i].name]=z; i++; } });
+  // 多出來的(沒填到的)歸最後一個有設定的區
+  while(i<list.length){ zonePreview[group][list[i].name]='三區'; i++; }
+  return list;
+}
+function renderZoneBox(){
+  const box=$('zoneBox');
+  if(!(adminMode && adminLevel==='admin')){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='block';
+  let h='<h4>成績分區（全部送督導後才能套用）</h4>';
+  Object.keys(GROUPS).forEach(group=>{
+    const list=zoneEligible(group); const done=list.length; const expect=zoneExpect[group];
+    if(zoneCounts[group][0]==null) zoneCounts[group]=zoneSuggest(group,done);
+    const ready=done>=expect && done>0;
+    h+=`<div style="margin:10px 0 4px;font-weight:700">${group}</div>`;
+    h+=`<div class="cfg-note">已定案 <b style="color:${ready?'var(--teal-dark)':'#C2741A'}">${done}</b> 人　應評 <input type="number" class="zexp" data-g="${group}" value="${expect}" style="width:54px;padding:3px;border:1px solid var(--hair);border-radius:6px;text-align:center"> 人　${ready?'✅ 可套用':'⚠ 尚缺 '+(expect-done)+' 人，未完成不可套用'}</div>`;
+    h+=`<div class="zrow">`+['一區','二區','三區','四區'].map((z,zi)=>
+      `<label>${z} <input type="number" class="zc" data-g="${group}" data-i="${zi}" value="${zoneCounts[group][zi]||0}" style="width:48px;padding:3px;border:1px solid var(--hair);border-radius:6px;text-align:center"></label>`).join('')+`</div>`;
+    h+=`<div class="zfoot"><button class="addbtn zprev" data-g="${group}">預覽排名</button>
+      <button class="cfg-save zapply" data-g="${group}" ${ready?'':'disabled'} style="opacity:${ready?1:.5}">套用分區→寫回區域</button></div>`;
+    h+=`<div class="zlist" id="zlist_${group}"></div>`;
+  });
+  box.innerHTML=h;
+  box.querySelectorAll('.zexp').forEach(i=>i.onchange=()=>{ zoneExpect[i.dataset.g]=+i.value||0; renderZoneBox(); });
+  box.querySelectorAll('.zc').forEach(i=>i.onchange=()=>{ zoneCounts[i.dataset.g][+i.dataset.i]=+i.value||0; });
+  box.querySelectorAll('.zprev').forEach(b=>b.onclick=()=>previewZone(b.dataset.g));
+  box.querySelectorAll('.zapply').forEach(b=>b.onclick=()=>applyZone(b.dataset.g));
+  applyCollapse('zoneBox');
+}
+function previewZone(group){
+  const list=computeZones(group);
+  let h='<table class="zt"><tr><th>#</th><th>姓名</th><th>分數</th><th>區域</th></tr>';
+  list.forEach((p,idx)=>{ h+=`<tr><td>${idx+1}</td><td>${p.name}</td><td>${p.score}</td><td>${zonePreview[group][p.name]||''}</td></tr>`; });
+  h+='</table>';
+  document.getElementById('zlist_'+group).innerHTML=h;
+}
+function applyZone(group){
+  const done=zoneEligible(group).length;
+  if(done<zoneExpect[group]){ toast('尚未全部定案，不可套用'); return; }
+  computeZones(group);
+  const zones=Object.keys(zonePreview[group]).map(name=>({name, zone:zonePreview[group][name]}));
+  if(!confirm(group+'：將依排名把 '+zones.length+' 人的區域寫回考核表，確定？')) return;
+  api({action:'setZones', pass:adminPass, zones}).then(r=>{
+    if(r&&r.ok){ toast(group+' 分區完成，已寫回 '+r.n+' 人'); fetchFormsList(); }
+    else toast('套用失敗（需護理長密碼）');
+  }).catch(()=>toast('連線失敗'));
+}
+const collapseState={adminBox:true, zoneBox:true, cfgBox:true, formsBox:false, walkinBox:false};
+function applyCollapse(boxId){
+  const box=$(boxId); if(!box) return;
+  const h=box.querySelector(':scope > h4'); if(!h) return;
+  h.onclick=()=>{ collapseState[boxId]=!collapseState[boxId]; reflectCollapse(boxId); };
+  reflectCollapse(boxId);
+}
+function reflectCollapse(boxId){
+  const box=$(boxId); if(!box) return;
+  const h=box.querySelector(':scope > h4'); if(!h) return;
+  const collapsed=!!collapseState[boxId];
+  box.classList.toggle('collapsed', collapsed);
+  let arr=h.querySelector('.arr'); if(!arr){ arr=document.createElement('span'); arr.className='arr'; h.appendChild(arr); }
+  arr.textContent = collapsed ? '▸ 展開' : '▾ 收合';
 }
 function renderFormsList(){
   const box=$('formsBox'); if(!box) return;
@@ -1131,6 +1264,7 @@ function renderFormsList(){
     openForm(el.dataset.slot, {name:el.dataset.name, role:el.dataset.role}, true);
   });
   applyFormFilter();
+  applyCollapse('formsBox');
 }
 function applyFormFilter(){
   const q=String(formSearch).trim();
@@ -1180,6 +1314,7 @@ function renderAdmin(){
     rank+='</div>';
   }
   box.innerHTML=rows+pend+rank;
+  applyCollapse('adminBox');
   // 綁定點擊 → 開該人考核表
   box.querySelectorAll('.form-item').forEach(el=>el.onclick=()=>{
     if(adminLevel==='super' && el.dataset.stage!=='sent'){
@@ -1197,7 +1332,10 @@ function onSlot(id,takenByOther,isMine){
     return;
   }
   if(!currentUser){ toast('請先在上方選擇您的姓名'); return; }
-  if(isMine){ askCancel(id); return; }
+  if(isMine){
+    if(empFormLocked()){ toast('考核已進入主管程序，無法開啟'); return; }
+    openForm(id, currentUser, false); return;   // 開自己的考核表（自評）
+  }
   if(takenByOther){ toast('這個時段已被預約，請改選其他'); return; }
   const mine=myslot;
   if(mine) confirmBox('更改時段','您已預約 <span class="big">'+labelOf(mine)+'</span><br>要改為 <span class="big">'+labelOf(id)+'</span> 嗎？', ()=>commitBook(id));
@@ -1275,7 +1413,7 @@ function buildOfficialPrint(){
     <div class="pd-head"><div class="pd-org">嘉義基督教醫院　急診　護理部</div><div class="pd-title">${title}</div></div>
     <div class="pd-meta"><span>姓名：${formPerson.name}</span><span>職類：${roleLabel(formPerson.role)}</span><span>單位：急診</span><span>會談日期：${dateTxt}</span></div>
     <table class="pd-table"><thead><tr><th style="width:22px">類別</th><th>考核項目</th><th style="width:34px">配分</th><th style="width:40px">自評</th><th style="width:46px">主管評核</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="pd-tot"><span>人員自評分數：${selfTotal}</span><span>主管評核分數：${supTotal}</span><span>區域：＿＿＿</span></div>
+    <div class="pd-tot"><span>人員自評分數：${selfTotal}</span><span>主管評核分數：${supTotal}</span><span>區域：${formZone||"＿＿＿"}</span></div>
     <div class="pd-block"><div class="l">雙向回饋</div><div class="b">${fb.replace(/</g,'&lt;')}</div></div>
     <div class="pd-block"><div class="l">加分／其他事項備註</div><div class="b">${rm.replace(/</g,'&lt;')}</div></div>
     <div class="pd-sign">
@@ -1347,6 +1485,8 @@ $('adminBtn').onclick=()=>{
     adminMode=false; adminBookings=null; adminPass=''; adminLevel='';
     $('cfgBox').style.display='none'; $('cfgBox').innerHTML='';
     $('formsBox').style.display='none'; $('formsBox').innerHTML='';
+    $('zoneBox').style.display='none'; $('zoneBox').innerHTML='';
+    $('walkinBox').style.display='none'; $('walkinBox').innerHTML='';
     $('adminBtn').classList.remove('on'); $('adminBtn').textContent='管理檢視'; render(); return;
   }
   if(LIVE){ const pw=prompt('請輸入密碼\n護理長 / 督導 / 小組長以上'); if(pw) fetchAdmin(pw,false); }
