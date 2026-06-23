@@ -217,13 +217,31 @@
   @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
 
   /* 列印：只印考核單 */
+  /* 官方格式列印文件（螢幕上移到畫面外，列印時才顯示） */
+  #printDoc{position:fixed; left:-99999px; top:0; width:100%; background:#fff; color:#000;}
+  .pd-wrap{padding:10px 14px; font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif; color:#000;}
+  .pd-head{text-align:center; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:8px;}
+  .pd-org{font-size:12px;} .pd-title{font-size:18px; font-weight:700;}
+  .pd-meta{font-size:12.5px; margin-bottom:8px; display:flex; flex-wrap:wrap; gap:4px 18px;}
+  .pd-table{width:100%; border-collapse:collapse; font-size:11px;}
+  .pd-table th,.pd-table td{border:1px solid #000; padding:3px 5px; vertical-align:middle;}
+  .pd-table th{background:#eee; text-align:center; font-weight:700;}
+  .pd-table .cat{writing-mode:vertical-rl; text-align:center; font-weight:700; width:22px; letter-spacing:2px;}
+  .pd-table .c{text-align:center;}
+  .pd-sub{font-weight:700; background:#f6f6f6;}
+  .pd-note{background:#faf6ee; color:#7a4a17; font-size:10px;}
+  .pd-tot{display:flex; gap:24px; font-size:12.5px; font-weight:700; margin:8px 2px;}
+  .pd-block{font-size:12px; margin:6px 0;}
+  .pd-block .l{font-weight:700;} .pd-block .b{border:1px solid #000; min-height:36px; padding:4px 6px; white-space:pre-wrap;}
+  .pd-sign{display:flex; gap:10px; margin-top:12px;}
+  .pd-sign .col{flex:1; text-align:center; font-size:11px;}
+  .pd-sign .box{border:1px solid #000; height:80px; display:flex; align-items:center; justify-content:center;}
+  .pd-sign .box img{max-width:100%; max-height:76px;}
+  .pd-sign .lab{margin-top:3px;}
   @media print{
     body *{visibility:hidden;}
-    #formSheet, #formSheet *{visibility:visible;}
-    #formOverlay{position:static; background:none; padding:0; display:block;}
-    #formSheet{position:absolute; left:0; top:0; max-width:none; max-height:none;
-      box-shadow:none; border-radius:0;}
-    .form-actions{display:none;}
+    #printDoc, #printDoc *{visibility:visible;}
+    #printDoc{left:0;}
     .no-print{display:none!important;}
   }
 </style>
@@ -281,6 +299,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="printDoc"></div>
 
 <script>
 /* ===================================================================
@@ -1215,7 +1234,61 @@ $('mOk').onclick=()=>{ $('overlay').classList.remove('show'); okHandler&&okHandl
 $('mCancel').onclick=()=>$('overlay').classList.remove('show');
 $('overlay').onclick=e=>{ if(e.target===$('overlay')) $('overlay').classList.remove('show'); };
 $('formClose').onclick=closeForm;
-$('formPrint').onclick=()=>window.print();
+function buildOfficialPrint(){
+  if(!formPerson) return;
+  const form=activeForm;
+  const selfMap={}, supMap={};
+  document.querySelectorAll('.score-inp.self').forEach(i=>selfMap[i.dataset.key]=i.value||'');
+  document.querySelectorAll('.score-inp.sup').forEach(i=>supMap[i.dataset.key]=i.value||'');
+  const meta=$('formBody').querySelector('.fp-meta');
+  const dateTxt = meta ? (meta.children[3]?meta.children[3].textContent.replace('會談日期',''):'') : '';
+  // 依各職類正式表結構，cat 當第一欄（直書），每項一列，末加小計
+  let rows='';
+  if(form){
+    form.cats.forEach((c,ci)=>{
+      const lines=[];
+      let ki=0;
+      c.groups.forEach(g=>{
+        if(g.sub) lines.push(`<td class="pd-sub" colspan="4">${g.sub}</td>`);
+        g.items.forEach(it=>{
+          if(it.note){ lines.push(`<td class="pd-note" colspan="4">※ ${it.note}</td>`); return; }
+          const key=ci+'-'+(ki++);
+          lines.push(`<td>${it.t}</td><td class="c">${it.p>0?it.p:'—'}</td><td class="c">${selfMap[key]||''}</td><td class="c">${supMap[key]||''}</td>`);
+        });
+      });
+      let sSum=0,mSum=0;
+      document.querySelectorAll(`.score-inp.self[data-cat="${ci}"]`).forEach(i=>sSum+=(+i.value||0));
+      document.querySelectorAll(`.score-inp.sup[data-cat="${ci}"]`).forEach(i=>mSum+=(+i.value||0));
+      sSum=Math.min(sSum,c.full); mSum=Math.min(mSum,c.full);
+      lines.push(`<td class="pd-sub">小計</td><td class="c pd-sub">${c.full}</td><td class="c pd-sub">${sSum}</td><td class="c pd-sub">${mSum}</td>`);
+      lines.forEach((ln,idx)=>{
+        rows+= '<tr>' + (idx===0?`<td class="cat" rowspan="${lines.length}">${c.name}</td>`:'') + ln + '</tr>';
+      });
+    });
+  }
+  const selfTotal=($('selfTotal')||{}).textContent||'';
+  const supTotal=($('supTotal')||{}).textContent||'';
+  const fb=(document.querySelector('.fb-area')||{}).value||'';
+  const rm=(document.querySelector('.remark-area')||{}).value||'';
+  const sigImg=(id)=>{ const d=sigData(id); return d?`<img src="${d}">`:''; };
+  const sigD=(id)=> sigDates[id]?('日期：'+sigDates[id]):'';
+  const ev=(formPerson.role==='HN')?'督導':'護理長';
+  const title=(form?form.title:roleLabel(formPerson.role)+'考核表');
+  $('printDoc').innerHTML=`<div class="pd-wrap">
+    <div class="pd-head"><div class="pd-org">嘉義基督教醫院　急診　護理部</div><div class="pd-title">${title}</div></div>
+    <div class="pd-meta"><span>姓名：${formPerson.name}</span><span>職類：${roleLabel(formPerson.role)}</span><span>單位：急診</span><span>會談日期：${dateTxt}</span></div>
+    <table class="pd-table"><thead><tr><th style="width:22px">類別</th><th>考核項目</th><th style="width:34px">配分</th><th style="width:40px">自評</th><th style="width:46px">主管評核</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="pd-tot"><span>人員自評分數：${selfTotal}</span><span>主管評核分數：${supTotal}</span><span>區域：＿＿＿</span></div>
+    <div class="pd-block"><div class="l">雙向回饋</div><div class="b">${fb.replace(/</g,'&lt;')}</div></div>
+    <div class="pd-block"><div class="l">加分／其他事項備註</div><div class="b">${rm.replace(/</g,'&lt;')}</div></div>
+    <div class="pd-sign">
+      <div class="col"><div class="box">${sigImg('sig1')}</div><div class="lab">受考人簽名　${sigD('sig1')}</div></div>
+      <div class="col"><div class="box">${sigImg('sig2')}</div><div class="lab">單位主管（${ev}）　${sigD('sig2')}</div></div>
+      <div class="col"><div class="box">${sigImg('sig3')}</div><div class="lab">單位上一級主管（督導）　${sigD('sig3')}</div></div>
+    </div>
+  </div>`;
+}
+$('formPrint').onclick=()=>{ buildOfficialPrint(); setTimeout(()=>window.print(),50); };
 $('formSave').onclick=()=>saveForm();
 $('formSend').onclick=()=>saveForm('sent');
 $('formOverlay').onclick=e=>{ /* 點背景不關閉，避免誤觸跳出 */ };
