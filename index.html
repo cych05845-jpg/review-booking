@@ -951,7 +951,7 @@ function openForm(id, person, asAdmin){
       <div class="sig sig-wrap" id="wrap2"><div class="sig-cap">單位主管（${ev}）</div>
         <canvas class="sig-pad" id="sig2"></canvas>
         <div class="sig-foot"><span class="sig-date" id="date_sig2"></span><button class="sig-clear no-print" data-pad="sig2">清除</button></div></div>
-      <div class="sig sig-wrap" id="wrap3"><div class="sig-cap">單位上一級主管（督導）</div>
+      <div class="sig sig-wrap" id="wrap3"><div class="sig-cap">單位上一級主管（${person.role==='HN'?'副主任':'督導'}）</div>
         <canvas class="sig-pad" id="sig3"></canvas>
         <div class="sig-foot"><span class="sig-date" id="date_sig3"></span><button class="sig-clear no-print" data-pad="sig3">清除</button></div></div>
     </div>`;
@@ -1268,7 +1268,7 @@ function buildOfficialPrint(){
   const fb=(document.querySelector('.fb-area')||{}).value||'';
   const rm=(document.querySelector('.remark-area')||{}).value||'';
   const sigImg=(id)=>{ const d=sigData(id); return d?`<img src="${d}">`:''; };
-  const sigD=(id)=> sigDates[id]?('日期：'+sigDates[id]):'';
+  const sigD=(id)=>{ const has=sigData(id); if(!has) return ''; return '日期：'+(sigDates[id]||todayStr()); };
   const ev=(formPerson.role==='HN')?'督導':'護理長';
   const title=(form?form.title:roleLabel(formPerson.role)+'考核表');
   $('printDoc').innerHTML=`<div class="pd-wrap">
@@ -1281,7 +1281,7 @@ function buildOfficialPrint(){
     <div class="pd-sign">
       <div class="col"><div class="box">${sigImg('sig1')}</div><div class="lab">受考人簽名　${sigD('sig1')}</div></div>
       <div class="col"><div class="box">${sigImg('sig2')}</div><div class="lab">單位主管（${ev}）　${sigD('sig2')}</div></div>
-      <div class="col"><div class="box">${sigImg('sig3')}</div><div class="lab">單位上一級主管（督導）　${sigD('sig3')}</div></div>
+      <div class="col"><div class="box">${sigImg('sig3')}</div><div class="lab">單位上一級主管（${formPerson.role==='HN'?'副主任':'督導'}）　${sigD('sig3')}</div></div>
     </div>
   </div>`;
 }
